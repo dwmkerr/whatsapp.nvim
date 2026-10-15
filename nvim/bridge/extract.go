@@ -1,7 +1,7 @@
 package main
 
 import (
-	"path/filepath"
+	"mime"
 	"strings"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -75,21 +75,22 @@ func extract(m *waE2E.Message) extracted {
 	return e
 }
 
-func filenameFor(kind, mime string) string {
-	ext := ""
-	if i := strings.Index(mime, "/"); i >= 0 {
-		ext = mime[i+1:]
-		if j := strings.Index(ext, ";"); j >= 0 {
-			ext = ext[:j]
-		}
+func filenameFor(kind, contentType string) string {
+	// MIME labels are sender-controlled. Only known types in the expected
+	// family may select an extension; image/xls must never become image.xls.
+	types := map[string]string{
+		"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
+		"image/webp": "webp", "image/heic": "heic",
+		"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+		"video/x-matroska": "mkv", "video/3gpp": "3gp",
+		"audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/opus": "opus",
+		"audio/mp4": "m4a", "audio/aac": "aac", "audio/wav": "wav",
+		"audio/x-wav": "wav",
 	}
-	switch ext {
-	case "jpeg":
-		ext = "jpg"
-	case "ogg":
-		ext = "ogg"
-	case "":
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	ext := types[mediaType]
+	if err != nil || ext == "" || !strings.HasPrefix(mediaType, kind+"/") {
 		ext = "bin"
 	}
-	return kind + "." + filepath.Base(ext)
+	return kind + "." + ext
 }

@@ -27,14 +27,15 @@ import (
 
 // WA owns the whatsmeow client and translates its events into editor events.
 type WA struct {
-	cli      *whatsmeow.Client
-	store    *Store
-	out      *Writer
-	dir      string
-	log      waLog.Logger
-	pairing  sync.Mutex
-	names    sync.Map // jid string -> display name, avoids repeated contact lookups
-	syncDone bool
+	cli       *whatsmeow.Client
+	store     *Store
+	out       *Writer
+	dir       string
+	log       waLog.Logger
+	pairing   sync.Mutex
+	names     sync.Map // jid string -> display name, avoids repeated contact lookups
+	syncDone  bool
+	downloads chan struct{}
 }
 
 func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
@@ -63,7 +64,8 @@ func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open message store: %w", err)
 	}
-	w := &WA{cli: whatsmeow.NewClient(device, log.Sub("client")), store: st, out: out, dir: dir, log: log}
+	w := &WA{cli: whatsmeow.NewClient(device, log.Sub("client")), store: st, out: out, dir: dir, log: log,
+		downloads: make(chan struct{}, 2)}
 	w.cli.AddEventHandler(w.handleEvent)
 	return w, nil
 }
@@ -493,6 +495,12 @@ func (w *WA) sendReadState(ctx context.Context, chatJID string, read bool) {
 // Download fetches media into <store>/media/<chat>/<id>-<filename> and
 // returns the path. Cached files are returned without a network call.
 func (w *WA) Download(ctx context.Context, chatJID, msgID string) (string, error) {
+	select {
+	case w.downloads <- struct{}{}:
+		defer func() { <-w.downloads }()
+	default:
+		return "", errors.New("two downloads already in progress; try again when one finishes")
+	}
 	m, err := w.store.GetMessage(chatJID, msgID)
 	if err != nil {
 		return "", fmt.Errorf("unknown message %s", msgID)
@@ -500,25 +508,38 @@ func (w *WA) Download(ctx context.Context, chatJID, msgID string) (string, error
 	if m.MediaType == "" || m.raw == nil {
 		return "", errors.New("not a media message")
 	}
-	path, err := mediaPath(filepath.Join(w.dir, "media"), chatJID, msgID, m.Filename)
+	var pm waE2E.Message
+	if err := proto.Unmarshal(m.raw, &pm); err != nil {
+		return "", err
+	}
+	media, err := downloadable(&pm)
+	if err != nil {
+		return "", err
+	}
+	if media.GetFileLength() > maxMediaBytes {
+		return "", errMediaTooLarge
+	}
+	// Recompute the filename so messages cached before MIME validation was
+	// introduced cannot retain a misleading extension.
+	path, err := mediaPath(filepath.Join(w.dir, "media"), chatJID, msgID, extract(&pm).Filename)
 	if err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(path); err == nil {
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return "", errors.New("cached media is not a regular file")
+		}
+		if info.Size() > maxMediaBytes {
+			return "", errMediaTooLarge
+		}
 		return path, nil
-	}
-	var pm waE2E.Message
-	if err := proto.Unmarshal(m.raw, &pm); err != nil {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	data, err := w.cli.DownloadAny(ctx, &pm)
-	if err != nil {
-		return "", fmt.Errorf("download: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := saveMedia(ctx, path, media, w.cli.DownloadToFile); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -560,8 +581,8 @@ func (l stderrLogger) Sub(module string) waLog.Logger {
 
 var (
 	unsafePathChars = regexp.MustCompile(`[^A-Za-z0-9._-]+|\.{2,}`)
-	// Extensions the desktop opener treats as plain data. Anything else is
-	// stored as .bin so a remote filename can never pick an executable type.
+	// Recognised document/media extensions, not a guarantee of safe content.
+	// Unknown types are stored as .bin. Every open requires confirmation.
 	openableExt = map[string]bool{
 		"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true, "heic": true,
 		"mp4": true, "mov": true, "webm": true, "mkv": true, "3gp": true,

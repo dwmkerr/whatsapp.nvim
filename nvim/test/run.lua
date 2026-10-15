@@ -65,11 +65,17 @@ return function()
   wa.setup({ bin = root .. "/test/fake-bridge.sh", store = vim.fn.tempname(), notify = false, layout = "lines" })
   local S = require("whatsapp.state")
   local client = require("whatsapp.client")
+  local events, on = {}, client.on
+  client.on = function(event, callback)
+    events[event] = callback
+    on(event, callback)
+  end
 
   -- User configs toggle number options on insert, defined before the plugin
   -- builds its layout as a vimrc would be; the panes must reset them.
   vim.api.nvim_create_autocmd("InsertEnter", { callback = function() vim.cmd("set number norelativenumber") end })
   wa.open()
+  client.on = on
   check(wait_for(function() return #S.chats == 2 end), "chats loaded from bridge")
   check(S.layout_valid() and S.win_valid("list") and S.win_valid("chat"), "list and chat windows built")
   check(not S.win_valid("compose"), "compose hidden until a chat opens")
@@ -129,6 +135,8 @@ return function()
   check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 0, 1, false)[1], "●"), "list shows the unread mark")
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.chat_by_jid["111@s.whatsapp.net"].unread == 0, "toggle_unread clears again")
+
+  require("test.security")(check, events)
 
   wa.close()
   check(not S.layout_valid(), "close tears down the tab")

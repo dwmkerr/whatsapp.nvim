@@ -1,11 +1,12 @@
 -- Shared mutable state for the open WhatsApp session. One tab, one chat.
+local text = require("whatsapp.text")
 local M = {
   opts = nil,
   chats = {},        -- array of chat rows from the bridge, newest first
   chat_by_jid = {},
   current = nil,     -- jid of the open conversation
   messages = {},     -- jid -> array of messages, oldest first
-  reply_to = nil,    -- message being replied to, or nil
+  drafts = {},      -- jid -> session-only compose buffer, reply and pending send
   tab = nil,
   wins = { list = nil, chat = nil, compose = nil },
   bufs = { list = nil, chat = nil, compose = nil },
@@ -36,13 +37,13 @@ end
 
 function M.chat_name(jid)
   local c = M.chat_by_jid[jid]
-  return c and c.name or jid
+  return text.name(c and c.name or jid)
 end
 
 -- Chat and sender names come from remote users. Anything placed in a
 -- statusline-style option must have "%" doubled, else "%{...}" would evaluate.
-function M.bar_text(text)
-  return (tostring(text or ""):gsub("%%", "%%%%"))
+function M.bar_text(value)
+  return (text.single_line(value):gsub("%%", "%%%%"))
 end
 
 -- Name plus phone number for direct chats, so a stranger whose push name
@@ -69,7 +70,7 @@ end
 function M.reset_layout()
   M.tab = nil
   M.wins = { list = nil, chat = nil, compose = nil }
-  M.bufs = { list = nil, chat = nil, compose = nil }
+  -- Hidden buffers and per-chat drafts survive closing the tab.
 end
 
 return M

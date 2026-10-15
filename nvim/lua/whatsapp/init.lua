@@ -4,6 +4,7 @@ local list = require("whatsapp.ui.list")
 local chat = require("whatsapp.ui.chat")
 local compose = require("whatsapp.ui.compose")
 local pair = require("whatsapp.ui.pair")
+local display = require("whatsapp.text")
 
 local M = {}
 
@@ -54,13 +55,14 @@ local function flush_notifications()
   local line = "WhatsApp ● " .. pending.count .. " new · " .. table.concat(pending.names, ", ")
   local max = math.max(20, vim.o.columns - 12)
   if vim.fn.strdisplaywidth(line) > max then
-    line = vim.fn.strcharpart(line, 0, max - 1) .. "…"
+    line = display.fit(line, max - 1) .. "…"
   end
   pending.count, pending.names, pending.seen = 0, {}, {}
   vim.notify(line, vim.log.levels.INFO, { title = "WhatsApp" })
 end
 
 local function queue_notification(chat_name)
+  chat_name = display.name(chat_name)
   pending.count = pending.count + 1
   if not pending.seen[chat_name] then
     pending.seen[chat_name] = true
@@ -192,7 +194,10 @@ function M.toggle_unread(jid)
     client.request("chat.unread", { jid = jid })
     if S.current == jid then
       S.current = nil
-      S.reply_to = nil
+      if S.win_valid("compose") then
+        vim.api.nvim_win_close(S.wins.compose, true)
+        S.wins.compose = nil
+      end
       chat.render()
       compose.update_winbar()
       if S.win_valid("list") then
@@ -221,8 +226,10 @@ function M.open_chat(jid)
     return
   end
   S.current = jid
-  S.reply_to = nil
   M.ensure_compose()
+  -- Drop the previous chat's view immediately, even if loading this one is slow.
+  chat.render()
+  list.render()
   client.request("messages.list", { jid = jid, limit = S.opts.page_size }, function(err, msgs)
     if err then
       notify(err, vim.log.levels.ERROR)
@@ -278,28 +285,43 @@ end
 
 -- Actions ------------------------------------------------------------------
 
-function M.send_compose()
-  if not S.current then
+function M.send_compose(jid)
+  jid = jid or S.current
+  if not jid then
     notify("no chat open", vim.log.levels.WARN)
     return
   end
-  local text = compose.text()
-  if text == "" then
-    vim.bo[S.bufs.compose].modified = false
+  local draft = compose.draft(jid)
+  if draft.sending then
+    notify("this draft is already sending", vim.log.levels.WARN)
     return
   end
-  local params = { jid = S.current, text = text }
-  if S.reply_to then
-    params.reply_to = S.reply_to.id
+  local text = compose.text(jid)
+  local buf = draft.buf
+  if text == "" then
+    vim.bo[buf].modified = false
+    return
   end
+  local params = { jid = jid, text = text }
+  local reply = draft.reply_to
+  if reply then
+    params.reply_to = reply.id
+  end
+  local tick = vim.api.nvim_buf_get_changedtick(buf)
+  draft.sending = true
   client.request("message.send", params, function(err, sent)
+    draft.sending = false
     if err then
       notify("send failed: " .. err, vim.log.levels.ERROR)
       return
     end
-    compose.clear()
-    S.reply_to = nil
-    compose.update_winbar()
+    -- Clear only the draft that was sent, and only if it has not been edited
+    -- while awaiting the response. Other chats have independent buffers.
+    if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_changedtick(buf) == tick then
+      compose.clear(jid)
+      if draft.reply_to == reply then draft.reply_to = nil end
+    end
+    if S.current == jid then compose.update_winbar() end
     if S.messages[sent.chat_jid] then
       table.insert(S.messages[sent.chat_jid], sent)
     end
@@ -309,16 +331,17 @@ function M.send_compose()
 end
 
 function M.reply_to(m)
-  if not m then
+  if not m or not S.current or m.chat_jid ~= S.current then
     return
   end
-  S.reply_to = m
+  compose.draft().reply_to = m
   compose.update_winbar()
   M.focus_compose()
 end
 
 function M.cancel_reply()
-  S.reply_to = nil
+  local draft = compose.draft()
+  if draft then draft.reply_to = nil end
   compose.update_winbar()
 end
 
@@ -341,7 +364,7 @@ function M.react_to(m)
   end)
 end
 
-function M.open_media(m)
+local function fetch_media(m, open)
   if not m or not m.media_type or m.media_type == "" then
     return
   end
@@ -351,17 +374,22 @@ function M.open_media(m)
       notify("download failed: " .. err, vim.log.levels.ERROR)
       return
     end
-    -- Documents carry a sender-chosen name; images and friends are stored
-    -- under a known extension, so only documents need a look before opening.
-    if m.media_type == "document" then
-      local choice = vim.fn.confirm("Open " .. res.path .. "?", "&Open\n&Cancel", 2)
-      if choice ~= 1 then
-        notify("saved to " .. res.path)
-        return
-      end
+    notify("saved to " .. res.path)
+    if not open then return end
+    local choice = vim.fn.confirm("Open attachment in its default application?\n" .. res.path, "&Open\n&Cancel", 2)
+    if choice ~= 1 then
+      return
     end
     vim.ui.open(res.path)
   end)
+end
+
+function M.download_media(m)
+  fetch_media(m, false)
+end
+
+function M.open_media(m)
+  fetch_media(m, true)
 end
 
 function M.focus_compose()
@@ -398,14 +426,20 @@ end
 -- The compose pane only exists once a chat is open; nothing to write to
 -- before that.
 function M.ensure_compose()
-  if S.win_valid("compose") or not S.win_valid("chat") then
+  if not S.current or not S.win_valid("chat") then
     return
   end
-  S.wins.compose = vim.api.nvim_open_win(compose.ensure_buf(), false, {
-    split = "below",
-    win = S.wins.chat,
-    height = S.opts.compose_height,
-  })
+  local buf = compose.ensure_buf()
+  S.bufs.compose = buf
+  if S.win_valid("compose") then
+    vim.api.nvim_win_set_buf(S.wins.compose, buf)
+  else
+    S.wins.compose = vim.api.nvim_open_win(buf, false, {
+      split = "below",
+      win = S.wins.chat,
+      height = S.opts.compose_height,
+    })
+  end
   apply_win_opts("compose")
   compose.update_winbar()
 end
@@ -450,6 +484,7 @@ local function build_layout()
   })
   list.render()
   chat.render()
+  M.ensure_compose()
 end
 
 function M.open()

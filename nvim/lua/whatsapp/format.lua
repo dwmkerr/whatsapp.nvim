@@ -1,11 +1,12 @@
 -- Pure functions that turn bridge rows into buffer lines plus highlight
 -- spans. Kept free of editor calls so they are easy to test.
 local M = {}
+local text = require("whatsapp.text")
 
 local function pad_right(s, width)
   local len = vim.fn.strdisplaywidth(s)
   if len >= width then
-    return vim.fn.strcharpart(s, 0, width)
+    return text.fit(s, width)
   end
   return s .. string.rep(" ", width - len)
 end
@@ -32,7 +33,7 @@ function M.chat_list(chats, width)
     local mark = c.unread > 0 and "●" or " "
     local time = M.short_time(c.last_ts)
     local name_width = math.max(4, width - 2 - #time - 1)
-    lines[i] = mark .. " " .. pad_right(c.name ~= "" and c.name or c.jid, name_width) .. " " .. time
+    lines[i] = mark .. " " .. pad_right(text.name(c.name ~= "" and c.name or c.jid), name_width) .. " " .. time
     jids[i] = c.jid
     unread[i] = c.unread > 0
   end
@@ -43,7 +44,7 @@ local function media_tag(m)
   if m.media_type == nil or m.media_type == "" then
     return nil
   end
-  local name = m.filename and m.filename ~= "" and (" " .. m.filename) or ""
+  local name = m.filename and m.filename ~= "" and (" " .. text.name(m.filename)) or ""
   return "[" .. m.media_type .. name .. "]"
 end
 
@@ -109,7 +110,7 @@ function M.bubbles(messages, is_group, width)
       add(centered("── " .. os.date("%a %d %b %Y", m.ts) .. " ──", width), nil, "WhatsAppSeparator")
       last_day = day
     end
-    local who = m.from_me and "me" or (m.sender_name ~= "" and m.sender_name or m.sender)
+    local who = text.fit(text.name(m.from_me and "me" or (m.sender_name ~= "" and m.sender_name or m.sender)), inner_max - 1)
     local time = os.date("%H:%M", m.ts)
     local body = m.text or ""
     local tag = media_tag(m)
@@ -183,6 +184,7 @@ function M.conversation(messages, is_group)
     if not is_group and not m.from_me then
       who = m.sender_name ~= "" and m.sender_name or who
     end
+    who = text.name(who)
     local prefix = time .. " " .. who .. ": "
     local body = m.text or ""
     local tag = media_tag(m)

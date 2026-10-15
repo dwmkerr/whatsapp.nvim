@@ -20,7 +20,7 @@ The bridge runs as a child process of Neovim, like a language server. Incoming m
 
 ## Install
 
-Requires Go 1.25+ and a C compiler (SQLite is cgo).
+Requires Go 1.26.9+ and a C compiler (SQLite is cgo).
 
 The plugin lives in the `nvim/` directory of the repo, so point your plugin manager at that subdirectory.
 
@@ -81,7 +81,8 @@ Conversation (right):
 | `i` `a` `o` | Jump to compose buffer in insert mode |
 | `R` | Reply to the message under the cursor |
 | `r` | React to the message under the cursor |
-| `<CR>` `gf` | Download and open media under the cursor |
+| `<CR>` `gf` | Download media under the cursor |
+| `gx` | Download if needed, then confirm before opening in its default application |
 | `K` | Load older messages |
 | `U` | Mark chat unread and close it |
 | `L` | Toggle bubbles / lines |
@@ -99,6 +100,10 @@ Compose (bottom):
 The compose pane appears once a chat is open. With no chat open the right pane shows bridge status and the main keys.
 
 Multi-line messages work: write several lines, then `:w`.
+
+Each chat keeps its own draft and reply target in memory until Neovim exits. Switching chats or closing the WhatsApp tab preserves unsent drafts. A send response only clears the original draft if it has not been edited while sending.
+
+Attachments download without opening an application. Use `gx` to open one, with confirmation for every file type. Downloads stream to a temporary file and are checked before entering the cache. Each attachment is limited to 25 MiB and 60 seconds, with at most two downloads at once. Larger attachments can be opened in the official WhatsApp client.
 
 ## Configure
 
@@ -141,4 +146,4 @@ Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr
 
 Everything stays on your machine in the store directory: the session keys, the message database, and downloaded media. Nothing is encrypted at rest. Keep the directory out of cloud-synced folders and backups.
 
-The store is created owner-only (`0700`, databases `0600`). Names, filenames and message IDs all come from the other side of the chat and are treated as hostile: names are escaped before they reach the winbar, media is saved under a sanitised name with a known-safe extension (anything else becomes `.bin`), and documents ask before opening.
+The store is created owner-only (`0700`, databases `0600`). Display names have control characters removed and line breaks replaced with spaces; winbar text is also escaped. Media paths are sanitised, and image, video and audio extensions come from a small list of recognised MIME types for that media family. Unknown types become `.bin`. A recognised extension does not establish that a file is safe: opening any attachment requires confirmation.
