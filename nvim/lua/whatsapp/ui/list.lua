@@ -57,7 +57,7 @@ function M.render()
     end
     local bar = " WhatsApp"
     if n > 0 then
-      bar = bar .. " ● " .. n
+      bar = bar .. " · " .. n .. " unread"
     end
     vim.wo[S.wins.list].winbar = bar .. " · g? help"
   end

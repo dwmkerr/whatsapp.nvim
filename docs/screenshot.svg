@@ -8,10 +8,10 @@
 <circle cx="60" cy="18" r="6" fill="#28c840"/>
 <text x="515.2" y="23" text-anchor="middle" fill="#8a9bab" font-size="13">nvim — whatsapp.nvim</text>
 <rect x="16.0" y="44.0" width="307.2" height="24" fill="#2c3b47"/>
-<rect x="25.6" y="44.0" width="211.2" height="24" fill="#2c3b47"/>
+<rect x="25.6" y="44.0" width="278.4" height="24" fill="#2c3b47"/>
 <rect x="332.8" y="44.0" width="681.6" height="24" fill="#0f171d"/>
 <rect x="342.4" y="44.0" width="115.2" height="24" fill="#0f171d"/>
-<text x="25.6" y="61.3" fill="#eceff4" xml:space="preserve" textLength="211.2" lengthAdjust="spacingAndGlyphs" font-weight="bold">WhatsApp ● 2 · g? help</text>
+<text x="25.6" y="61.3" fill="#eceff4" xml:space="preserve" textLength="278.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">WhatsApp · 2 unread · g? help</text>
 <text x="323.2" y="61.3" fill="#4c5f70" xml:space="preserve" textLength="9.6" lengthAdjust="spacingAndGlyphs">│</text>
 <text x="342.4" y="61.3" fill="#eceff4" xml:space="preserve" textLength="115.2" lengthAdjust="spacingAndGlyphs" font-weight="bold">Dan Shepherd</text>
 <text x="35.2" y="85.3" fill="#d8dee9" xml:space="preserve" textLength="220.8" lengthAdjust="spacingAndGlyphs">Alice Chen             </text>
