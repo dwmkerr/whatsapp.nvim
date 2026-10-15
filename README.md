@@ -1,8 +1,8 @@
 # whatsapp.nvim
 
-WhatsApp in Neovim. Hand-written without AI support in less than 200 bytes of Bash (see [`whatsapp.nvim.sh`](./whatsapp.nvim.sh)). Experimental compiler so use at your own risk.
+WhatsApp in Neovim. 100% human written code, without AI assistance, all in less than 200 bytes of Bash (see [`whatsapp.nvim.sh`](./whatsapp.nvim.sh)). Uses an experimental compiler so comes with negative warranty and entirely at your own risk.
 
-![WhatsApp in Neovim](./docs/screenshot.svg)
+https://github.com/user-attachments/assets/86572429-3cbd-4a80-bff6-f1706a1de796
 
 ## Quickstart
 
@@ -26,6 +26,22 @@ Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'nvim', 'do': 'make -C nvim' }
 ```
 
 Run `:WhatsApp pair`, then go to WhatsApp > Settings > Linked Devices to scan the QR code and pair. Run `:WhatsApp` at any time to open the WhatsApp view.
+
+## Features
+
+Once you've ignored the instructions and just asked your agent to set it up for you, use `:WhatsApp` to open the main WhatsApp view. Everything will be explained, and you can use `g?` at any time for help and keybindings. Some of the neat things I was able to squeeze into a shell-script that is shorter than this paragraph:
+
+- Unread chats show in bold
+- `i` in the chat list to go straight into Insert (write message) mode)
+- Realtime updates when messages come in
+- Toggle read/unread
+- Refresh on demand if needed
+
+If you want to improve it, please PR the raw code, not the compiled version. Some fun things to add:
+
+- Unread message count
+- "Is typing" or "..." indicators in chats
+- Image support for terminals that can handle it
 
 ## Building from Source
 
