@@ -2,7 +2,7 @@
 
 WhatsApp in Neovim. 100% human written code, without AI assistance, all in less than 200 bytes of Bash (see [`whatsapp.nvim.sh`](./whatsapp.nvim.sh)). Uses an experimental compiler so comes with negative warranty and entirely at your own risk.
 
-https://github.com/user-attachments/assets/86572429-3cbd-4a80-bff6-f1706a1de796
+https://github.com/user-attachments/assets/1d78afec-1443-4e5d-ab55-ece2732e22b8
 
 ## Quickstart
 
