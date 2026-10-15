@@ -1,0 +1,6 @@
+bin/
+scratch/
+*.db
+*.db-wal
+*.db-shm
+bridge/bridge
