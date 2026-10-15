@@ -45,6 +45,32 @@ local function notify(msg, level)
   vim.notify("WhatsApp: " .. msg, level or vim.log.levels.INFO)
 end
 
+-- Incoming-message notifications are coalesced into one line: several
+-- echoes in one redraw would stack into a hit-enter prompt.
+local pending = { count = 0, names = {}, seen = {}, timer = nil }
+
+local function flush_notifications()
+  pending.timer = nil
+  local line = "WhatsApp ● " .. pending.count .. " new · " .. table.concat(pending.names, ", ")
+  local max = math.max(20, vim.o.columns - 12)
+  if vim.fn.strdisplaywidth(line) > max then
+    line = vim.fn.strcharpart(line, 0, max - 1) .. "…"
+  end
+  pending.count, pending.names, pending.seen = 0, {}, {}
+  vim.notify(line, vim.log.levels.INFO, { title = "WhatsApp" })
+end
+
+local function queue_notification(chat_name)
+  pending.count = pending.count + 1
+  if not pending.seen[chat_name] then
+    pending.seen[chat_name] = true
+    table.insert(pending.names, chat_name)
+  end
+  if not pending.timer then
+    pending.timer = vim.defer_fn(flush_notifications, 300)
+  end
+end
+
 -- Bridge events ------------------------------------------------------------
 
 local function wire_events()
@@ -119,13 +145,7 @@ local function wire_events()
       end
     elseif S.opts.notify and S.synced and not m.from_me then
       -- Messages replayed at startup are already marked unread in the list.
-      local text = m.text ~= "" and m.text or ("[" .. (m.media_type or "media") .. "]")
-      -- One short line: a long body would force a hit-enter prompt on every message.
-      text = text:gsub("%s+", " ")
-      if #text > 80 then
-        text = text:sub(1, 80) .. "…"
-      end
-      vim.notify(d.chat_name .. ": " .. text, vim.log.levels.INFO, { title = "WhatsApp" })
+      queue_notification(d.chat_name)
     end
     M.refresh_chats()
   end)
