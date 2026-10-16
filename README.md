@@ -35,12 +35,12 @@ Once you've ignored the instructions and just asked your agent to set it up for 
 - `i` in the chat list to go straight into Insert (write message) mode)
 - Realtime updates when messages come in
 - Toggle read/unread
+- "Is typing" bubble in the open chat
 - Refresh on demand if needed
 
 If you want to improve it, please PR the raw code, not the compiled version. Some fun things to add:
 
 - Unread message count
-- "Is typing" or "..." indicators in chats
 - Image support for terminals that can handle it
 
 ## Building from Source
@@ -62,6 +62,17 @@ make -C dist build        # needs Go and a C compiler
 ```
 
 `make -C dist test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
+
+I have found that when working live in WhatsApp, the best flow is:
+
+```vim
+:WhatsApp logout
+:WhatsApp stop
+:PlugUpdate
+
+" Then in the terminal re-open with:
+nvim +WhatsApp
+```
 
 ## Other Notes
 

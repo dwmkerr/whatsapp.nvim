@@ -72,6 +72,47 @@ local function queue_notification(chat_name)
   end
 end
 
+-- Presence and typing -------------------------------------------------------
+
+-- Online while a chat is open and the terminal is focused, like the phone
+-- with a chat on screen. WhatsApp only sends typing notifications to
+-- devices that are online.
+local function set_presence(available)
+  if S.available == available or not client.running() then
+    return
+  end
+  S.available = available
+  client.request("presence", { available = available }, function() end)
+end
+
+local typing_timer = nil
+
+local function stop_typing()
+  if typing_timer then
+    typing_timer:stop()
+    typing_timer:close()
+    typing_timer = nil
+  end
+  S.typing = nil
+  chat.render_typing(false)
+end
+
+local function start_typing(d)
+  S.typing = { jid = d.chat, sender = d.sender, who = d.sender_name, media = d.media, since = vim.uv.now() }
+  chat.render_typing(true)
+  if not typing_timer then
+    typing_timer = vim.uv.new_timer()
+    typing_timer:start(0, 400, vim.schedule_wrap(function()
+      -- WhatsApp sometimes never sends "paused"; drop a stale indicator.
+      if not S.typing or vim.uv.now() - S.typing.since > 15000 then
+        stop_typing()
+        return
+      end
+      chat.render_typing(true)
+    end))
+  end
+end
+
 -- Bridge events ------------------------------------------------------------
 
 local function wire_events()
@@ -150,10 +191,23 @@ local function wire_events()
   client.on("chats.changed", function()
     M.refresh_chats()
   end)
+  client.on("typing", function(d)
+    if d.chat ~= S.current then
+      return
+    end
+    if d.state == "composing" then
+      start_typing(d)
+    else
+      stop_typing()
+    end
+  end)
   client.on("message", function(d)
     local m = d.message
     if S.messages[m.chat_jid] then
       table.insert(S.messages[m.chat_jid], m)
+    end
+    if S.typing and S.typing.jid == m.chat_jid and S.typing.sender == m.sender then
+      stop_typing()
     end
     local visible = S.current == m.chat_jid
       and S.layout_valid()
@@ -212,6 +266,8 @@ function M.set_unread(jid, unread)
     client.request("chat.unread", { jid = jid })
     if S.current == jid then
       S.current = nil
+      stop_typing()
+      set_presence(false)
       if S.win_valid("compose") then
         vim.api.nvim_win_close(S.wins.compose, true)
         S.wins.compose = nil
@@ -273,7 +329,11 @@ function M.open_chat(jid)
   if not jid then
     return
   end
+  if S.current ~= jid then
+    stop_typing()
+  end
   S.current = jid
+  set_presence(true)
   M.ensure_compose()
   -- Drop the previous chat's view immediately, even if loading this one is slow.
   chat.render()
@@ -509,12 +569,17 @@ local function build_layout()
   apply_win_opts("list")
 
   vim.api.nvim_create_autocmd({ "WinEnter", "InsertEnter", "InsertLeave", "FocusGained", "FocusLost" }, {
-    callback = function()
+    callback = function(ev)
       local w = vim.api.nvim_get_current_win()
       for name, win in pairs(S.wins) do
         if win == w then
           apply_win_opts(name)
         end
+      end
+      if ev.event == "FocusLost" then
+        set_presence(false)
+      elseif ev.event == "FocusGained" and S.current and S.layout_valid() then
+        set_presence(true)
       end
     end,
   })
@@ -568,6 +633,8 @@ function M.toggle()
 end
 
 function M.close()
+  stop_typing()
+  set_presence(false)
   if S.layout_valid() then
     pcall(vim.api.nvim_set_current_tabpage, S.tab)
     pcall(vim.cmd, "tabclose")
@@ -577,6 +644,7 @@ end
 
 function M.stop()
   M.close()
+  S.available = false
   client.stop()
   notify("bridge stopped")
 end

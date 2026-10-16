@@ -156,6 +156,27 @@ function M.bubbles(messages, is_group, width)
   return lines, owners, spans
 end
 
+-- Typing indicator as an incoming bubble whose body is one to three dots,
+-- frame cycling 1..3. Same box rules as M.bubbles so it lines up.
+function M.typing_bubble(who, frame, width)
+  local max_box = math.max(24, math.floor(width * 0.7))
+  local inner_max = max_box - 4
+  who = text.fit(text.name(who), inner_max - 1)
+  local dots = string.rep("· ", ((frame - 1) % 3) + 1):gsub(" $", "")
+  local inner = math.min(inner_max, math.max(dw(who) + 2, 8))
+  return {
+    "╭─ " .. who .. " " .. string.rep("─", inner - dw(who) - 1) .. "╮",
+    "│ " .. dots .. string.rep(" ", inner - dw(dots)) .. " │",
+    "╰" .. string.rep("─", inner + 2) .. "╯",
+  }
+end
+
+-- Typing indicator for the lines layout: "Alice is typing..".
+function M.typing_line(who, frame, media)
+  local verb = media == "audio" and "is recording audio" or "is typing"
+  return text.name(who) .. " " .. verb .. string.rep(".", ((frame - 1) % 3) + 1)
+end
+
 -- Conversation: returns lines, a message per line (nil for separators), and
 -- highlight spans {line, col_start, col_end, group}.
 function M.conversation(messages, is_group)

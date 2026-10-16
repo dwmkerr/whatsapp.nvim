@@ -53,6 +53,8 @@ Scan the QR code from your phone: WhatsApp > Settings > Linked Devices > Link a 
 
 ## Use
 
+While a chat is open and the terminal has focus the device is marked online, so WhatsApp sends typing notifications and contacts can see you as online, just like the phone with a chat on screen. The indicator shows as a bubble under the last message.
+
 | Command | What |
 |---|---|
 | `:WhatsApp` | Open (or jump to) the WhatsApp tab |
@@ -144,9 +146,9 @@ printf '{"id":1,"method":"status"}\n' | ./bin/wa-bridge -store /tmp/wa
 
 One JSON object per line. Requests carry an `id` and `method`; responses echo the `id` with `result` or `error`; events have no `id`.
 
-Methods: `status`, `pair.start`, `logout`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `media.download {jid, id}`, `contacts.search {query}`.
+Methods: `status`, `pair.start`, `logout`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `presence {available}`, `media.download {jid, id}`, `contacts.search {query}`.
 
-Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `fatal`.
+Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `typing {chat, sender, sender_name, state, media}`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `fatal`.
 
 ## Privacy
 

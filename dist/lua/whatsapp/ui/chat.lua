@@ -3,6 +3,8 @@ local format = require("whatsapp.format")
 
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
+local typing_ns = vim.api.nvim_create_namespace("whatsapp_typing")
+local typing_frame = 0
 local line_owner = {}
 local rendered_jid = nil -- chat shown by the previous render, for scroll follow
 
@@ -203,6 +205,38 @@ function M.render()
       vim.api.nvim_win_set_cursor(S.wins.chat, { #lines, 0 })
     end
   end
+  M.render_typing(false)
+end
+
+-- Draw or clear the typing indicator under the last line as virtual lines,
+-- so the animation never touches the buffer text or the scroll position.
+-- advance moves to the next animation frame.
+function M.render_typing(advance)
+  local buf = S.bufs.chat
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buf, typing_ns, 0, -1)
+  local t = S.typing
+  if not t or t.jid ~= S.current or S.qr then
+    return
+  end
+  if advance then
+    typing_frame = typing_frame + 1
+  end
+  local width = S.text_width("chat", 80)
+  local rows
+  if S.opts.layout == "bubbles" then
+    rows = format.typing_bubble(t.who, typing_frame, width)
+  else
+    rows = { format.typing_line(t.who, typing_frame, t.media) }
+  end
+  local virt = {}
+  for _, r in ipairs(rows) do
+    virt[#virt + 1] = { { r, "WhatsAppBubble" } }
+  end
+  local last = vim.api.nvim_buf_line_count(buf) - 1
+  vim.api.nvim_buf_set_extmark(buf, typing_ns, last, 0, { virt_lines = virt })
 end
 
 return M

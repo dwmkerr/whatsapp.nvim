@@ -126,6 +126,14 @@ func dispatch(ctx context.Context, wa *WA, req Request) (interface{}, error) {
 			return nil, err
 		}
 		return nil, wa.MarkRead(ctx, p.JID)
+	case "presence":
+		var p struct {
+			Available bool `json:"available"`
+		}
+		if err := params(req, &p); err != nil {
+			return nil, err
+		}
+		return nil, wa.SetPresence(ctx, p.Available)
 	case "chat.unread":
 		var p struct {
 			JID string `json:"jid"`

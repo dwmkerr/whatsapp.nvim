@@ -31,7 +31,7 @@ while IFS= read -r line; do
       echo '{"event":"logged_out","data":{"reason":"user"}}'
       echo '{"id":'"$id"',"result":null}'
       ;;
-    *'"method":"chat.read"'*|*'"method":"chat.unread"'*|*'"method":"names.refresh"'*)
+    *'"method":"chat.read"'*|*'"method":"chat.unread"'*|*'"method":"names.refresh"'*|*'"method":"presence"'*)
       echo '{"id":'"$id"',"result":null}'
       ;;
     *)

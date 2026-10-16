@@ -16,6 +16,8 @@ local M = {
   just_paired = false,
   qr = nil,          -- pairing QR lines while a pair.start is waiting for a scan
   pairing = false,   -- pair.start sent, QR code not here yet
+  typing = nil,      -- { jid, sender, who, media } while the other party types in the open chat
+  available = false, -- bridge asked to show this device online
 }
 
 -- Columns available for text in a window, after number/sign columns the

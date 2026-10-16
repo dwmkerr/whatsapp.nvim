@@ -35,6 +35,7 @@ type WA struct {
 	pairing   sync.Mutex
 	names     sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone  bool
+	available bool // editor asked to stay "online", see SetPresence
 	downloads chan struct{}
 }
 
@@ -183,6 +184,17 @@ func (w *WA) handleEvent(evt interface{}) {
 		w.out.Emit("disconnected", nil)
 	case *events.LoggedOut:
 		w.out.Emit("logged_out", map[string]string{"reason": v.Reason.String()})
+	case *events.ChatPresence:
+		ctx := context.Background()
+		chat := w.canonical(ctx, v.Chat, v.RecipientAlt)
+		sender := w.canonical(ctx, v.Sender, v.SenderAlt)
+		w.out.Emit("typing", map[string]interface{}{
+			"chat":        chat.String(),
+			"sender":      sender.String(),
+			"sender_name": w.senderName(ctx, sender, "", false),
+			"state":       string(v.State),
+			"media":       string(v.Media),
+		})
 	case *events.Message:
 		w.handleMessage(v, true)
 	case *events.HistorySync:
@@ -510,6 +522,21 @@ func (w *WA) MarkRead(ctx context.Context, chatJID string) error {
 	return nil
 }
 
+// SetPresence marks this device online or offline. Typing notifications
+// only arrive while online, so the editor turns this on while a chat is
+// open and focused, which also shows contacts the user as online.
+func (w *WA) SetPresence(ctx context.Context, available bool) error {
+	w.available = available
+	if !w.cli.IsConnected() {
+		return nil
+	}
+	state := types.PresenceUnavailable
+	if available {
+		state = types.PresenceAvailable
+	}
+	return w.cli.SendPresence(ctx, state)
+}
+
 // withPresence runs fn between an "available" and an "unavailable" presence.
 // WhatsApp only forwards read receipts and app state patches from a linked
 // device to the phone while that device is marked available, so without
@@ -519,6 +546,9 @@ func (w *WA) withPresence(ctx context.Context, fn func()) {
 		w.log.Warnf("presence available: %v", err)
 	}
 	fn()
+	if w.available {
+		return
+	}
 	if err := w.cli.SendPresence(ctx, types.PresenceUnavailable); err != nil {
 		w.log.Warnf("presence unavailable: %v", err)
 	}
