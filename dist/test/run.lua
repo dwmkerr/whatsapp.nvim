@@ -127,18 +127,19 @@ return function()
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
 
-  -- Typing indicator: virtual lines under the last message for the open
-  -- chat only, cleared on pause.
-  local function typing_marks()
-    return vim.api.nvim_buf_get_extmarks(S.bufs.chat, vim.api.nvim_create_namespace("whatsapp_typing"), 0, -1, { details = true })
+  -- Typing indicator: rows under the last message for the open chat only,
+  -- cleared on pause.
+  local function typing_shown()
+    local last = vim.api.nvim_buf_get_lines(S.bufs.chat, -2, -1, false)[1] or ""
+    return last:find("is typing", 1, true) ~= nil
   end
   events["typing"]({ chat = "222@g.us", sender = "333@s.whatsapp.net", sender_name = "Bob", state = "composing", media = "" })
-  check(#typing_marks() == 0, "typing in another chat is ignored")
+  check(not typing_shown(), "typing in another chat is ignored")
   events["typing"]({ chat = "111@s.whatsapp.net", sender = "111@s.whatsapp.net", sender_name = "Alice", state = "composing", media = "" })
-  local marks = typing_marks()
-  check(#marks == 1 and marks[1][4].virt_lines[1][1][1]:find("Alice is typing", 1, true) ~= nil, "typing shows under the open chat")
+  check(typing_shown(), "typing shows under the open chat")
+  check(vim.api.nvim_win_get_cursor(S.wins.chat)[1] == vim.api.nvim_buf_line_count(S.bufs.chat), "view follows the indicator")
   events["typing"]({ chat = "111@s.whatsapp.net", sender = "111@s.whatsapp.net", sender_name = "Alice", state = "paused", media = "" })
-  check(#typing_marks() == 0 and S.typing == nil, "paused clears the indicator")
+  check(not typing_shown() and S.typing == nil, "paused clears the indicator")
   check(S.available == true, "open chat marks the device online")
 
   -- ~ on the open chat flags it unread, mirrors to the bridge, and closes it.
