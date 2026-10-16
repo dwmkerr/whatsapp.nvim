@@ -87,6 +87,7 @@ return function()
 
   wa.open_chat("111@s.whatsapp.net")
   check(wait_for(function() return S.messages["111@s.whatsapp.net"] ~= nil end), "messages loaded")
+  check(vim.api.nvim_win_get_cursor(S.wins.chat)[1] == vim.api.nvim_buf_line_count(S.bufs.chat), "opened chat starts at the bottom")
   check(S.win_valid("compose"), "compose window created on open")
   vim.api.nvim_set_current_win(S.wins.compose)
   vim.cmd("startinsert")

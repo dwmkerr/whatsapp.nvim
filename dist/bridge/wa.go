@@ -196,7 +196,12 @@ func (w *WA) handleEvent(evt interface{}) {
 		// stored under bare phone numbers.
 		w.RefreshNames(context.Background())
 	case *events.MarkChatAsRead:
-		// Toggled from the phone or another linked device.
+		// Toggled from the phone or another linked device. The full sync
+		// after pairing replays every historical toggle; the history sync
+		// already carries the real unread counts, so those are ignored.
+		if v.FromFullSync {
+			return
+		}
 		jid := v.JID.ToNonAD().String()
 		if v.Action.GetRead() {
 			_ = w.store.ClearUnread(jid)
@@ -333,7 +338,7 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 }
 
 func (w *WA) handleHistorySync(evt *events.HistorySync) {
-	count := 0
+	count, unread := 0, 0
 	for _, conv := range evt.Data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
 		if err != nil {
@@ -359,8 +364,10 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 				n = 1
 			}
 			_ = w.store.SetUnread(w.canonical(context.Background(), jid, types.EmptyJID).String(), n)
+			unread++
 		}
 	}
+	w.log.Infof("history sync %s: %d conversations, %d messages, %d unread", evt.Data.GetSyncType(), len(evt.Data.GetConversations()), count, unread)
 	w.out.Emit("sync.progress", map[string]int{"messages": count})
 	w.out.Emit("chats.changed", nil)
 }

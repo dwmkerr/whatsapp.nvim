@@ -4,6 +4,7 @@ local format = require("whatsapp.format")
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
 local line_owner = {}
+local rendered_jid = nil -- chat shown by the previous render, for scroll follow
 
 function M.ensure_buf()
   if S.bufs.chat and vim.api.nvim_buf_is_valid(S.bufs.chat) then
@@ -169,12 +170,15 @@ function M.render()
   end
   line_owner = owners
 
+  -- Follow the bottom unless the user scrolled up in this same chat; a
+  -- newly opened chat always starts at its latest message.
   local follow = true
   local old_count = vim.api.nvim_buf_line_count(buf)
-  if S.win_valid("chat") then
+  if S.win_valid("chat") and S.current == rendered_jid then
     local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
     follow = row >= old_count - 1
   end
+  rendered_jid = S.current
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
