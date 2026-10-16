@@ -15,6 +15,7 @@ local M = {
   sync = nil,        -- last sync.progress payload while history loads
   just_paired = false,
   qr = nil,          -- pairing QR lines while a pair.start is waiting for a scan
+  pairing = false,   -- pair.start sent, QR code not here yet
 }
 
 -- Columns available for text in a window, after number/sign columns the

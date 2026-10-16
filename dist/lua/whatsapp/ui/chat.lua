@@ -79,9 +79,14 @@ local function splash(width, height)
     end
     rows[#rows + 1] = {}
     note("waiting for scan · q closes")
+  elseif S.pairing then
+    note("connecting… waiting for a QR code")
   elseif S.status.paired == false then
     note("not paired")
+    rows[#rows + 1] = {}
     key(":WhatsApp pair", "links this device")
+    rows[#rows + 1] = {}
+    note("then scan the code with WhatsApp > Linked Devices")
   elseif not S.status.connected then
     note("connecting…")
   elseif S.sync and not S.synced then
@@ -97,8 +102,10 @@ local function splash(width, height)
     key("i", "open and compose")
     key("u", "next unread")
     key("~", "toggle unread")
+    key("gU gu", "mark unread / read")
     key("<Tab>", "next pane")
     key("g?", "all keys")
+    key("q", "close")
     rows[#rows + 1] = {}
     note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
   end
@@ -185,7 +192,10 @@ function M.render()
   if S.win_valid("chat") then
     local name = S.current and S.chat_title(S.current) or "WhatsApp"
     vim.wo[S.wins.chat].winbar = " " .. S.bar_text(name)
-    if follow then
+    if not S.current or S.qr then
+      -- Splash and QR code read from the top.
+      vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
+    elseif follow then
       vim.api.nvim_win_set_cursor(S.wins.chat, { #lines, 0 })
     end
   end

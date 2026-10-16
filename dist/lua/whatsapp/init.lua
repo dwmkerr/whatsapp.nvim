@@ -106,6 +106,7 @@ local function wire_events()
     notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp pair", vim.log.levels.ERROR)
   end)
   client.on("pair.qr", function(d)
+    S.pairing = false
     S.qr = d.lines
     if not S.layout_valid() then
       M.open()
@@ -113,6 +114,7 @@ local function wire_events()
     chat.render()
   end)
   local function end_pairing()
+    S.pairing = false
     S.qr = nil
     chat.render()
   end
@@ -540,6 +542,9 @@ end
 function M.open()
   if not client.running() then
     wire_events()
+    -- Fresh bridge, fresh status: a stale "connected" would skip the
+    -- connecting splash.
+    S.status = { paired = nil, connected = false }
     S.synced = false
     S.sync = nil
     if not client.start(S.opts.bin, S.opts.store) then
@@ -582,8 +587,12 @@ function M.pair()
   if not client.running() then
     return
   end
+  S.pairing = true
+  chat.render()
   client.request("pair.start", nil, function(err)
     if err then
+      S.pairing = false
+      chat.render()
       notify(err, vim.log.levels.WARN)
     end
   end)
