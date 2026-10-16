@@ -162,7 +162,7 @@ function M.typing_bubble(who, frame, width)
   local max_box = math.max(24, math.floor(width * 0.7))
   local inner_max = max_box - 4
   who = text.fit(text.name(who), inner_max - 1)
-  local dots = string.rep("· ", ((frame - 1) % 3) + 1):gsub(" $", "")
+  local dots = string.rep("·", ((frame - 1) % 3) + 1)
   local inner = math.min(inner_max, math.max(dw(who) + 2, 8))
   return {
     "╭─ " .. who .. " " .. string.rep("─", inner - dw(who) - 1) .. "╮",
