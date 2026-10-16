@@ -31,18 +31,17 @@ function M.ensure_buf()
   map("gf", function() wa.download_media(M.message_under_cursor()) end, "Download media")
   map("gx", function() wa.open_media(M.message_under_cursor()) end, "Confirm and open media")
   map("K", wa.load_older, "Load older messages")
-  map("U", function() wa.toggle_unread(S.current) end, "Mark chat unread")
+  map("~", function() wa.toggle_unread(S.current) end, "Toggle unread")
+  map("gU", function() wa.set_unread(S.current, true) end, "Mark chat unread and close it")
+  map("gu", function() wa.set_unread(S.current, false) end, "Mark chat read")
+  map("<Tab>", function() wa.focus_next(1) end, "Next pane")
+  map("<S-Tab>", function() wa.focus_next(-1) end, "Previous pane")
   map("q", wa.close, "Close WhatsApp")
   map("g?", function() require("whatsapp.ui.help").show("chat") end, "Keys")
   map("L", function()
     S.opts.layout = S.opts.layout == "bubbles" and "lines" or "bubbles"
     M.render()
   end, "Toggle bubble/line layout")
-  map("<C-l>", function()
-    if S.win_valid("list") then
-      vim.api.nvim_set_current_win(S.wins.list)
-    end
-  end, "Focus chat list")
   return buf
 end
 

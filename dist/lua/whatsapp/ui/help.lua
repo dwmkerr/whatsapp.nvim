@@ -7,8 +7,10 @@ local keys = {
     { "<CR> l", "open chat" },
     { "i", "open chat and compose" },
     { "u", "next unread chat" },
-    { "U", "toggle unread" },
+    { "~", "toggle unread" },
+    { "gU gu", "mark unread / read" },
     { "R", "refresh chats and contact names" },
+    { "<Tab>", "next pane" },
     { "q", "close WhatsApp" },
   },
   chat = {
@@ -18,15 +20,16 @@ local keys = {
     { "<CR> gf", "download media" },
     { "gx", "confirm and open media" },
     { "K", "load older messages" },
-    { "U", "mark chat unread and close it" },
+    { "~", "toggle unread" },
+    { "gU gu", "mark unread (closes chat) / read" },
     { "L", "toggle bubbles / lines" },
-    { "<C-l>", "focus chat list" },
+    { "<Tab>", "next pane" },
     { "q", "close WhatsApp" },
   },
   compose = {
     { ":w", "send" },
     { "q", "cancel reply" },
-    { "<C-k>", "focus chat" },
+    { "<Tab>", "next pane" },
   },
 }
 

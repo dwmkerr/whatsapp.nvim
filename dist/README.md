@@ -70,8 +70,10 @@ Chat list (left):
 | `<CR>` `l` | Open chat |
 | `i` | Open chat and start composing |
 | `u` | Jump to next unread chat |
-| `U` | Toggle unread, mirrored to your phone |
+| `~` | Toggle unread, mirrored to your phone |
+| `gU` `gu` | Mark unread / read |
 | `R` | Refresh |
+| `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
 | `q` | Close WhatsApp |
 
@@ -85,8 +87,10 @@ Conversation (right):
 | `<CR>` `gf` | Download media under the cursor |
 | `gx` | Download if needed, then confirm before opening in its default application |
 | `K` | Load older messages |
-| `U` | Mark chat unread and close it |
+| `~` | Toggle unread |
+| `gU` `gu` | Mark chat unread (closes it) / read |
 | `L` | Toggle bubbles / lines |
+| `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
 | `/` `n` `gg` `G` | Native search and movement |
 
@@ -96,6 +100,7 @@ Compose (bottom):
 |---|---|
 | `:w` | Send |
 | `q` | Cancel reply |
+| `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
 
 The compose pane appears once a chat is open. With no chat open the right pane shows bridge status and the main keys.

@@ -126,7 +126,7 @@ return function()
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
 
-  -- U on the open chat flags it unread, mirrors to the bridge, and closes it.
+  -- ~ on the open chat flags it unread, mirrors to the bridge, and closes it.
   -- The fake's chats.list always reports Alice unread, so pin the local
   -- state first; the real bridge persists the flag.
   S.chat_by_jid["111@s.whatsapp.net"].unread = 0
@@ -135,6 +135,14 @@ return function()
   check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 0, 1, false)[1], "●"), "list shows the unread mark")
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.chat_by_jid["111@s.whatsapp.net"].unread == 0, "toggle_unread clears again")
+  wa.set_unread("111@s.whatsapp.net", true)
+  wa.set_unread("111@s.whatsapp.net", false)
+  check(S.chat_by_jid["111@s.whatsapp.net"].unread == 0, "set_unread round-trips")
+  vim.api.nvim_set_current_win(S.wins.list)
+  wa.focus_next(1)
+  check(vim.api.nvim_get_current_win() == S.wins.chat, "Tab moves list to chat")
+  wa.focus_next(-1)
+  check(vim.api.nvim_get_current_win() == S.wins.list, "S-Tab moves back")
 
   require("test.security")(check, events)
 

@@ -37,11 +37,8 @@ function M.ensure_buf(jid)
   })
   vim.keymap.set("n", "q", wa.cancel_reply, { buffer = buf, silent = true, desc = "Cancel reply" })
   vim.keymap.set("n", "g?", function() require("whatsapp.ui.help").show("compose") end, { buffer = buf, silent = true, desc = "Keys" })
-  vim.keymap.set("n", "<C-k>", function()
-    if S.win_valid("chat") then
-      vim.api.nvim_set_current_win(S.wins.chat)
-    end
-  end, { buffer = buf, silent = true, desc = "Focus chat" })
+  vim.keymap.set("n", "<Tab>", function() wa.focus_next(1) end, { buffer = buf, silent = true, desc = "Next pane" })
+  vim.keymap.set("n", "<S-Tab>", function() wa.focus_next(-1) end, { buffer = buf, silent = true, desc = "Previous pane" })
   return buf
 end
 

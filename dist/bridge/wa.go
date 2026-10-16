@@ -472,19 +472,35 @@ func (w *WA) MarkRead(ctx context.Context, chatJID string) error {
 	for _, m := range recent {
 		bySender[m.Sender] = append(bySender[m.Sender], types.MessageID(m.ID))
 	}
-	for s, ids := range bySender {
-		sender := types.EmptyJID
-		if chat.Server == types.GroupServer {
-			sender, _ = types.ParseJID(s)
+	w.withPresence(ctx, func() {
+		for s, ids := range bySender {
+			sender := types.EmptyJID
+			if chat.Server == types.GroupServer {
+				sender, _ = types.ParseJID(s)
+			}
+			if err := w.cli.MarkRead(ctx, ids, time.Now(), chat, sender); err != nil {
+				w.log.Warnf("mark read: %v", err)
+			}
 		}
-		if err := w.cli.MarkRead(ctx, ids, time.Now(), chat, sender); err != nil {
-			w.log.Warnf("mark read: %v", err)
-		}
-	}
-	// Receipts do not clear a chat the phone flagged as unread; the app
-	// state patch does.
-	w.sendReadState(ctx, chatJID, true)
+		// Receipts do not clear a chat the phone flagged as unread; the app
+		// state patch does.
+		w.sendReadState(ctx, chatJID, true)
+	})
 	return nil
+}
+
+// withPresence runs fn between an "available" and an "unavailable" presence.
+// WhatsApp only forwards read receipts and app state patches from a linked
+// device to the phone while that device is marked available, so without
+// the blip the phone keeps showing chats unread.
+func (w *WA) withPresence(ctx context.Context, fn func()) {
+	if err := w.cli.SendPresence(ctx, types.PresenceAvailable); err != nil {
+		w.log.Warnf("presence available: %v", err)
+	}
+	fn()
+	if err := w.cli.SendPresence(ctx, types.PresenceUnavailable); err != nil {
+		w.log.Warnf("presence unavailable: %v", err)
+	}
 }
 
 // MarkUnread flags a chat unread locally and on the phone, the same as
@@ -493,7 +509,7 @@ func (w *WA) MarkUnread(ctx context.Context, chatJID string) error {
 	if err := w.store.SetUnread(chatJID, 1); err != nil {
 		return err
 	}
-	w.sendReadState(ctx, chatJID, false)
+	w.withPresence(ctx, func() { w.sendReadState(ctx, chatJID, false) })
 	return nil
 }
 

@@ -184,15 +184,15 @@ function M.refresh_names()
   end)
 end
 
--- Flip the unread flag on a chat, mirrored to the phone like the app's
+-- Set the unread flag on a chat, mirrored to the phone like the app's
 -- "Mark as unread". Marking the open chat unread also closes it, otherwise
 -- the next incoming message would read it again.
-function M.toggle_unread(jid)
+function M.set_unread(jid, unread)
   local c = jid and S.chat_by_jid[jid]
   if not c then
     return
   end
-  if c.unread > 0 then
+  if not unread then
     c.unread = 0
     client.request("chat.read", { jid = jid })
   else
@@ -212,6 +212,36 @@ function M.toggle_unread(jid)
     end
   end
   list.render()
+end
+
+function M.toggle_unread(jid)
+  local c = jid and S.chat_by_jid[jid]
+  if c then
+    M.set_unread(jid, c.unread == 0)
+  end
+end
+
+-- Cycle focus list, chat, compose (when open), like Tab in diffview or
+-- lazygit. dir is 1 or -1.
+function M.focus_next(dir)
+  local order = {}
+  for _, name in ipairs({ "list", "chat", "compose" }) do
+    if S.win_valid(name) then
+      order[#order + 1] = name
+    end
+  end
+  if #order == 0 then
+    return
+  end
+  local cur = vim.api.nvim_get_current_win()
+  local idx = 0
+  for i, name in ipairs(order) do
+    if S.wins[name] == cur then
+      idx = i
+    end
+  end
+  local nxt = order[((idx - 1 + dir) % #order) + 1]
+  vim.api.nvim_set_current_win(S.wins[nxt])
 end
 
 function M.refresh_chats()
