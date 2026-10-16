@@ -22,12 +22,12 @@ The bridge runs as a child process of Neovim, like a language server. Incoming m
 
 Requires Go 1.26.9+ and a C compiler (SQLite is cgo).
 
-The plugin lives in the `nvim/` directory of the repo, so point your plugin manager at that subdirectory.
+The plugin lives in the `dist/` directory of the repo, so point your plugin manager at that subdirectory.
 
 vim-plug:
 
 ```vim
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'nvim', 'do': 'make -C nvim' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
 ```
 
 lazy.nvim:
@@ -35,7 +35,7 @@ lazy.nvim:
 ```lua
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C nvim",
+  build = "make -C dist",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/nvim")
     require("whatsapp").setup()

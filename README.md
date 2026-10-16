@@ -10,16 +10,16 @@ Install via your favourite plugin manager:
 
 ```vim
 " vim-plug
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'nvim', 'do': 'make -C nvim' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
 ```
 
 ```lua
 -- lazy.nvim
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C nvim",
+  build = "make -C dist",
   config = function()
-    vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/nvim")
+    vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/dist")
     require("whatsapp").setup()
   end,
 }
@@ -45,7 +45,7 @@ If you want to improve it, please PR the raw code, not the compiled version. Som
 
 ## Building from Source
 
-Check [`whatsapp.nvim.sh`](./whatsapp.nvim.sh) to build from source. For convenience, the pre-compiled version is in the [`./nvim/`](./nvim) folder.
+Check [`whatsapp.nvim.sh`](./whatsapp.nvim.sh) to build from source. For convenience, the pre-compiled version is in the [`./dist/`](./dist) folder.
 
 ## Developer Guide
 
@@ -55,13 +55,13 @@ Run from a local clone:
 git clone https://github.com/dwmkerr/whatsapp.nvim.git
 cd whatsapp.nvim
 # Compile the plugin (needs go and lua).
-make -C nvim build        # needs Go and a C compiler
+make -C dist build        # needs Go and a C compiler
 
 # Don't forget to change vimrc/nvim config to:
-# Plug '~/repos/whatsapp.nvim', { 'rtp': 'nvim', 'do': 'make -C nvim' }
+# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
 ```
 
-`make -C nvim test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`nvim/README.md`](./nvim/README.md).
+`make -C dist test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
 
 ## Other Notes
 
