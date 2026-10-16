@@ -180,6 +180,10 @@ func (w *WA) handleEvent(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Connected:
 		w.out.Emit("connected", nil)
+		// The editor may have asked to be online before the socket was up.
+		if w.available {
+			_ = w.SetPresence(context.Background(), true)
+		}
 	case *events.Disconnected:
 		w.out.Emit("disconnected", nil)
 	case *events.LoggedOut:
@@ -188,6 +192,7 @@ func (w *WA) handleEvent(evt interface{}) {
 		ctx := context.Background()
 		chat := w.canonical(ctx, v.Chat, v.RecipientAlt)
 		sender := w.canonical(ctx, v.Sender, v.SenderAlt)
+		w.log.Infof("chat presence %s in %s: %s %s", sender, chat, v.State, v.Media)
 		w.out.Emit("typing", map[string]interface{}{
 			"chat":        chat.String(),
 			"sender":      sender.String(),
@@ -534,6 +539,7 @@ func (w *WA) SetPresence(ctx context.Context, available bool) error {
 	if available {
 		state = types.PresenceAvailable
 	}
+	w.log.Infof("presence %s", state)
 	return w.cli.SendPresence(ctx, state)
 }
 
