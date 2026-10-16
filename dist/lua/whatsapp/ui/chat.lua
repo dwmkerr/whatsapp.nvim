@@ -69,20 +69,16 @@ local function splash(width, height)
     note("bridge not running")
     key(":WhatsApp", "restarts it")
   elseif S.qr then
-    -- The code must be fully visible to scan, so refuse to crop it.
-    local need = #S.qr + 5
-    if height < need or width < vim.fn.strdisplaywidth(S.qr[1]) then
-      note("QR code needs " .. need .. " rows, this window has " .. height)
-      note("zoom out or enlarge the window, it redraws by itself")
-    else
-      note("scan with WhatsApp > Linked Devices > Link a Device")
-      rows[#rows + 1] = {}
-      for _, l in ipairs(S.qr) do
-        rows[#rows + 1] = { text = l, hl = "Normal" }
-      end
-      rows[#rows + 1] = {}
-      note("waiting for scan · q closes")
+    note("scan with WhatsApp > Linked Devices > Link a Device")
+    if height < #S.qr + 4 or width < vim.fn.strdisplaywidth(S.qr[1]) then
+      note("code is " .. #S.qr .. " rows · zoom out or enlarge the window to see it all")
     end
+    rows[#rows + 1] = {}
+    for _, l in ipairs(S.qr) do
+      rows[#rows + 1] = { text = l, hl = "Normal" }
+    end
+    rows[#rows + 1] = {}
+    note("waiting for scan · q closes")
   elseif S.status.paired == false then
     note("not paired")
     key(":WhatsApp pair", "links this device")
@@ -149,6 +145,10 @@ function M.render()
   if not S.current or S.qr then
     lines, spans = splash(width, height)
     owners = {}
+    -- A wrapped QR code cannot be scanned; let it run off the edge instead.
+    if S.win_valid("chat") then
+      vim.wo[S.wins.chat].wrap = S.qr == nil
+    end
   elseif S.opts.layout == "bubbles" then
     lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width)
   else

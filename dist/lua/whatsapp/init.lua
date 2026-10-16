@@ -78,8 +78,11 @@ local function wire_events()
   client.clear_listeners()
   client.on("ready", function(data)
     S.status = data
+    chat.render()
   end)
   client.on("unpaired", function()
+    S.status.paired = false
+    chat.render()
     notify("not paired yet, run :WhatsApp pair", vim.log.levels.WARN)
   end)
   client.on("connected", function()
@@ -109,21 +112,22 @@ local function wire_events()
     end
     chat.render()
   end)
-  client.on("pair.ok", function()
+  local function end_pairing()
     S.qr = nil
+    chat.render()
+  end
+  client.on("pair.ok", function()
+    end_pairing()
     S.status.paired = true
     S.just_paired = true
-    chat.render()
     notify("paired, syncing history")
   end)
   client.on("pair.timeout", function()
-    S.qr = nil
-    chat.render()
+    end_pairing()
     notify("pairing timed out, run :WhatsApp pair again", vim.log.levels.WARN)
   end)
   client.on("pair.error", function(d)
-    S.qr = nil
-    chat.render()
+    end_pairing()
     notify("pairing failed: " .. d.error, vim.log.levels.ERROR)
   end)
   client.on("sync.progress", function(d)
@@ -462,6 +466,10 @@ local function apply_win_opts(name)
   end
   for k, v in pairs(WIN_OPTS[name]) do
     vim.wo[S.wins[name]][k] = v
+  end
+  -- A wrapped QR code cannot be scanned; let it run off the edge instead.
+  if name == "chat" and S.qr then
+    vim.wo[S.wins.chat].wrap = false
   end
 end
 
