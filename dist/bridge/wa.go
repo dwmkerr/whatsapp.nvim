@@ -352,6 +352,14 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 			w.handleMessage(parsed, false)
 			count++
 		}
+		// The phone's unread state only arrives with the sync; without it
+		// every chat looks read until a new message lands.
+		if n := int(conv.GetUnreadCount()); n > 0 || conv.GetMarkedAsUnread() {
+			if n == 0 {
+				n = 1
+			}
+			_ = w.store.SetUnread(w.canonical(context.Background(), jid, types.EmptyJID).String(), n)
+		}
 	}
 	w.out.Emit("sync.progress", map[string]int{"messages": count})
 	w.out.Emit("chats.changed", nil)
