@@ -3,7 +3,6 @@ local S = require("whatsapp.state")
 local list = require("whatsapp.ui.list")
 local chat = require("whatsapp.ui.chat")
 local compose = require("whatsapp.ui.compose")
-local pair = require("whatsapp.ui.pair")
 local display = require("whatsapp.text")
 
 local M = {}
@@ -104,20 +103,27 @@ local function wire_events()
     notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp pair", vim.log.levels.ERROR)
   end)
   client.on("pair.qr", function(d)
-    pair.show(d.lines)
+    S.qr = d.lines
+    if not S.layout_valid() then
+      M.open()
+    end
+    chat.render()
   end)
   client.on("pair.ok", function()
-    pair.close()
+    S.qr = nil
     S.status.paired = true
     S.just_paired = true
+    chat.render()
     notify("paired, syncing history")
   end)
   client.on("pair.timeout", function()
-    pair.close()
+    S.qr = nil
+    chat.render()
     notify("pairing timed out, run :WhatsApp pair again", vim.log.levels.WARN)
   end)
   client.on("pair.error", function(d)
-    pair.close()
+    S.qr = nil
+    chat.render()
     notify("pairing failed: " .. d.error, vim.log.levels.ERROR)
   end)
   client.on("sync.progress", function(d)
@@ -562,18 +568,15 @@ function M.stop()
   notify("bridge stopped")
 end
 
+-- The QR code renders in the chat pane, so pairing opens the view first.
 function M.pair()
+  M.open()
   if not client.running() then
-    wire_events()
-    if not client.start(S.opts.bin, S.opts.store) then
-      return
-    end
+    return
   end
   client.request("pair.start", nil, function(err)
     if err then
       notify(err, vim.log.levels.WARN)
-    else
-      notify("waiting for QR code…")
     end
   end)
 end

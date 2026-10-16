@@ -68,6 +68,21 @@ local function splash(width, height)
   if not client.running() then
     note("bridge not running")
     key(":WhatsApp", "restarts it")
+  elseif S.qr then
+    -- The code must be fully visible to scan, so refuse to crop it.
+    local need = #S.qr + 5
+    if height < need or width < vim.fn.strdisplaywidth(S.qr[1]) then
+      note("QR code needs " .. need .. " rows, this window has " .. height)
+      note("zoom out or enlarge the window, it redraws by itself")
+    else
+      note("scan with WhatsApp > Linked Devices > Link a Device")
+      rows[#rows + 1] = {}
+      for _, l in ipairs(S.qr) do
+        rows[#rows + 1] = { text = l, hl = "Normal" }
+      end
+      rows[#rows + 1] = {}
+      note("waiting for scan · q closes")
+    end
   elseif S.status.paired == false then
     note("not paired")
     key(":WhatsApp pair", "links this device")
@@ -85,6 +100,8 @@ local function splash(width, height)
     key("<CR>", "open chat")
     key("i", "open and compose")
     key("u", "next unread")
+    key("~", "toggle unread")
+    key("<Tab>", "next pane")
     key("g?", "all keys")
     rows[#rows + 1] = {}
     note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
@@ -127,7 +144,9 @@ function M.render()
   local width = S.text_width("chat", 80)
   local height = S.win_valid("chat") and vim.api.nvim_win_get_height(S.wins.chat) or 20
   local lines, owners, spans
-  if not S.current then
+  -- A pending QR code takes the pane over even with a chat open: you can
+  -- only be pairing because there is no session to read from anyway.
+  if not S.current or S.qr then
     lines, spans = splash(width, height)
     owners = {}
   elseif S.opts.layout == "bubbles" then

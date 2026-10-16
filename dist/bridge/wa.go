@@ -93,7 +93,7 @@ func (w *WA) Connect(ctx context.Context) error {
 }
 
 // Pair runs the QR flow in the background, emitting pair.qr with the code
-// rendered as terminal half-blocks so the editor can show it in a float.
+// rendered as terminal half-blocks so the editor can show it in a buffer.
 func (w *WA) Pair(ctx context.Context) error {
 	if w.Paired() {
 		return errors.New("already paired")
@@ -116,7 +116,13 @@ func (w *WA) Pair(ctx context.Context) error {
 			switch item.Event {
 			case "code":
 				var buf bytes.Buffer
-				qrterminal.GenerateHalfBlock(item.Code, qrterminal.L, &buf)
+				// Quiet zone 1 instead of the default 4: phones scan it fine
+				// and it saves three rows on small terminals.
+				qrterminal.GenerateWithConfig(item.Code, qrterminal.Config{
+					Level: qrterminal.L, Writer: &buf, HalfBlocks: true, QuietZone: 1,
+					BlackChar: qrterminal.BLACK_BLACK, WhiteChar: qrterminal.WHITE_WHITE,
+					BlackWhiteChar: qrterminal.BLACK_WHITE, WhiteBlackChar: qrterminal.WHITE_BLACK,
+				})
 				w.out.Emit("pair.qr", map[string]interface{}{
 					"lines": strings.Split(strings.TrimRight(buf.String(), "\n"), "\n"),
 					"code":  item.Code,

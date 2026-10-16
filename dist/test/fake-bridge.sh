@@ -23,6 +23,10 @@ while IFS= read -r line; do
       text=$(printf '%s' "$line" | sed -E 's/.*"text":"([^"]*)".*/\1/')
       echo '{"id":'"$id"',"result":{"id":"sent1","chat_jid":"111@s.whatsapp.net","sender":"me","sender_name":"me","text":"'"$text"'","ts":1760400200,"from_me":true}}'
       ;;
+    *'"method":"pair.start"'*)
+      echo '{"event":"pair.qr","data":{"lines":["█▀▀▀█ ▄ █▀▀▀█","█ ▀ █ █ █ ▀ █","▀▀▀▀▀ ▀ ▀▀▀▀▀"],"code":"fake"}}'
+      echo '{"id":'"$id"',"result":null}'
+      ;;
     *'"method":"logout"'*)
       echo '{"event":"logged_out","data":{"reason":"user"}}'
       echo '{"id":'"$id"',"result":null}'

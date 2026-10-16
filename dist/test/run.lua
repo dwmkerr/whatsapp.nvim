@@ -146,6 +146,17 @@ return function()
 
   require("test.security")(check, events)
 
+  -- pair.qr renders the code in the chat pane splash, pair.ok clears it.
+  wa.pair()
+  check(wait_for(function()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false)) do
+      if l:find("█▀▀▀█ ▄ █▀▀▀█", 1, true) then return true end
+    end
+    return false
+  end), "QR code renders in the chat pane")
+  events["pair.ok"]()
+  check(S.qr == nil and S.status.paired == true, "pair.ok clears the QR code")
+
   -- logout closes the view, forgets the session and stops the bridge.
   wa.logout()
   check(wait_for(function() return not client.running() end), "logout stops the bridge")
