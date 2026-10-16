@@ -95,6 +95,12 @@ local function wire_events()
     chat.render()
   end)
   client.on("logged_out", function(d)
+    S.status.paired = false
+    S.status.connected = false
+    S.synced = false
+    if d and d.reason == "user" then
+      return
+    end
     notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp pair", vim.log.levels.ERROR)
   end)
   client.on("pair.qr", function(d)
@@ -539,6 +545,23 @@ function M.pair()
     else
       notify("waiting for QR code…")
     end
+  end)
+end
+
+-- Unlink this device from the phone and forget the local session. Stops the
+-- bridge so the next :WhatsApp pair starts with a clean device store.
+function M.logout()
+  if not client.running() then
+    notify("bridge not running")
+    return
+  end
+  client.request("logout", nil, function(err)
+    M.close()
+    client.stop()
+    if err then
+      notify(err, vim.log.levels.WARN)
+    end
+    notify("logged out, run :WhatsApp pair to link again")
   end)
 end
 

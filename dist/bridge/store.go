@@ -141,6 +141,13 @@ func (s *Store) UnnamedChats() ([]Chat, error) {
 	return out, rows.Err()
 }
 
+// Reset drops cached chats and messages, used on logout so a later pair
+// starts from the new account's history sync.
+func (s *Store) Reset() error {
+	_, err := s.db.Exec(`DELETE FROM messages; DELETE FROM chats;`)
+	return err
+}
+
 func (s *Store) IncrementUnread(jid string) error {
 	_, err := s.db.Exec(`UPDATE chats SET unread = unread + 1 WHERE jid = ?`, jid)
 	return err

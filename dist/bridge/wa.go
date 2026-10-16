@@ -143,6 +143,32 @@ func (w *WA) Disconnect() {
 	_ = w.store.Close()
 }
 
+// Logout unlinks this device on the phone and wipes the local session and
+// cached messages. If the server request fails (offline, or the phone
+// already removed us) the local wipe still happens so the next pair.start
+// gets a fresh QR code.
+func (w *WA) Logout(ctx context.Context) error {
+	if !w.Paired() {
+		return errors.New("not paired")
+	}
+	remoteErr := w.cli.Logout(ctx)
+	if remoteErr != nil {
+		w.cli.Disconnect()
+		if err := w.cli.Store.Delete(ctx); err != nil {
+			return fmt.Errorf("logout: %v; delete session: %w", remoteErr, err)
+		}
+	}
+	if err := w.store.Reset(); err != nil {
+		return fmt.Errorf("clear messages: %w", err)
+	}
+	w.syncDone = false
+	w.out.Emit("logged_out", map[string]string{"reason": "user"})
+	if remoteErr != nil {
+		return fmt.Errorf("session cleared locally, but the phone was not told: %w", remoteErr)
+	}
+	return nil
+}
+
 func (w *WA) handleEvent(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Connected:

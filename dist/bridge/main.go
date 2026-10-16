@@ -81,6 +81,8 @@ func dispatch(ctx context.Context, wa *WA, req Request) (interface{}, error) {
 		return wa.Status(), nil
 	case "pair.start":
 		return nil, wa.Pair(ctx)
+	case "logout":
+		return nil, wa.Logout(ctx)
 	case "chats.list":
 		return wa.store.ListChats()
 	case "messages.list":

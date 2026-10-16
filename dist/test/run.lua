@@ -138,6 +138,11 @@ return function()
 
   require("test.security")(check, events)
 
+  -- logout closes the view, forgets the session and stops the bridge.
+  wa.logout()
+  check(wait_for(function() return not client.running() end), "logout stops the bridge")
+  check(not S.layout_valid() and S.status.paired == false, "logout closes the tab and clears paired state")
+
   wa.close()
   check(not S.layout_valid(), "close tears down the tab")
   client.stop()

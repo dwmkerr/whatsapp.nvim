@@ -59,6 +59,7 @@ Scan the QR code from your phone: WhatsApp > Settings > Linked Devices > Link a 
 | `:WhatsApp toggle` | Open or close |
 | `:WhatsApp Alice` | Open and jump to the chat matching "Alice" |
 | `:WhatsApp pair` | Show the pairing QR code |
+| `:WhatsApp logout` | Unlink this device from your phone and forget the local session |
 | `:WhatsApp status` | Bridge status |
 | `:WhatsApp stop` | Close and kill the bridge |
 
@@ -138,7 +139,7 @@ printf '{"id":1,"method":"status"}\n' | ./bin/wa-bridge -store /tmp/wa
 
 One JSON object per line. Requests carry an `id` and `method`; responses echo the `id` with `result` or `error`; events have no `id`.
 
-Methods: `status`, `pair.start`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `media.download {jid, id}`, `contacts.search {query}`.
+Methods: `status`, `pair.start`, `logout`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `media.download {jid, id}`, `contacts.search {query}`.
 
 Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `fatal`.
 
