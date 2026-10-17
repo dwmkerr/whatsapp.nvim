@@ -32,6 +32,9 @@ type Message struct {
 	Filename   string `json:"filename,omitempty"`
 	QuotedID   string `json:"quoted_id,omitempty"`
 	QuotedText string `json:"quoted_text,omitempty"`
+	Seconds    int    `json:"seconds,omitempty"`
+	Waveform   []int  `json:"waveform,omitempty"`
+	Cached     bool   `json:"cached,omitempty"`
 	raw        []byte
 }
 
@@ -213,7 +216,7 @@ func (s *Store) ListMessages(jid string, limit int, beforeTS int64) ([]Message, 
 	}
 	rows, err := s.db.Query(`
 		SELECT m.id, m.chat_jid, m.sender, m.sender_name, m.text, m.ts, m.from_me, m.media_type, m.filename, m.quoted_id,
-			COALESCE((SELECT q.text FROM messages q WHERE q.id = m.quoted_id AND q.chat_jid = m.chat_jid), '')
+			COALESCE((SELECT q.text FROM messages q WHERE q.id = m.quoted_id AND q.chat_jid = m.chat_jid), ''), m.raw
 		FROM messages m
 		WHERE m.chat_jid = ? AND m.ts < ?
 		ORDER BY m.ts DESC LIMIT ?`, jid, beforeTS, limit)
@@ -226,7 +229,7 @@ func (s *Store) ListMessages(jid string, limit int, beforeTS int64) ([]Message, 
 		var m Message
 		var fromMe int
 		if err := rows.Scan(&m.ID, &m.ChatJID, &m.Sender, &m.SenderName, &m.Text, &m.TS, &fromMe,
-			&m.MediaType, &m.Filename, &m.QuotedID, &m.QuotedText); err != nil {
+			&m.MediaType, &m.Filename, &m.QuotedID, &m.QuotedText, &m.raw); err != nil {
 			return nil, err
 		}
 		m.FromMe = fromMe == 1

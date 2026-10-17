@@ -36,6 +36,7 @@ Once you've ignored the instructions and just asked your agent to set it up for 
 - Realtime updates when messages come in
 - Toggle read/unread
 - "Is typing" bubble in the open chat
+- Voice notes show duration and waveform
 - Refresh on demand if needed
 
 If you want to improve it, please PR the raw code, not the compiled version. Some fun things to add:

@@ -483,6 +483,12 @@ local function fetch_media(m, open)
       return
     end
     notify("saved to " .. res.path)
+    if not m.cached then
+      m.cached = true
+      if S.current == m.chat_jid then
+        chat.render()
+      end
+    end
     if not open then return end
     local choice = vim.fn.confirm("Open attachment in its default application?\n" .. res.path, "&Open\n&Cancel", 2)
     if choice ~= 1 then

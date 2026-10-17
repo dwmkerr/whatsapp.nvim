@@ -40,12 +40,59 @@ function M.chat_list(chats, width)
   return lines, jids, unread
 end
 
+local function duration(seconds)
+  return string.format("%d:%02d", math.floor(seconds / 60), seconds % 60)
+end
+
+-- Voice note levels (0-100) as a row of block characters. Buckets take the
+-- loudest sample so the shape stays spiky, and levels are scaled to the
+-- loudest point in the clip so quiet notes still show a shape.
+function M.waveform(levels, cols)
+  local blocks = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" }
+  if not levels or #levels == 0 then
+    return ""
+  end
+  cols = math.min(cols, #levels)
+  local peak = 1
+  for _, v in ipairs(levels) do
+    peak = math.max(peak, v)
+  end
+  local out = {}
+  for i = 1, cols do
+    local lo = math.floor((i - 1) * #levels / cols) + 1
+    local hi = math.floor(i * #levels / cols)
+    local v = 0
+    for j = lo, math.max(lo, hi) do
+      v = math.max(v, levels[j] or 0)
+    end
+    out[i] = blocks[math.max(1, math.ceil(v / peak * #blocks))]
+  end
+  return table.concat(out)
+end
+
 local function media_tag(m)
   if m.media_type == nil or m.media_type == "" then
     return nil
   end
-  local name = m.filename and m.filename ~= "" and (" " .. text.name(m.filename)) or ""
-  return "[" .. m.media_type .. name .. "]"
+  local parts = { m.media_type }
+  -- A voice note's filename is always a generic audio.ogg; the duration and
+  -- waveform say more.
+  if m.media_type ~= "voice" and m.filename and m.filename ~= "" then
+    parts[#parts + 1] = text.name(m.filename)
+  end
+  if m.seconds and m.seconds > 0 then
+    parts[#parts + 1] = duration(m.seconds)
+  end
+  if m.media_type == "voice" then
+    local wave = M.waveform(m.waveform, 12)
+    if wave ~= "" then
+      parts[#parts + 1] = wave
+    end
+  end
+  if m.cached then
+    parts[#parts + 1] = "✓"
+  end
+  return "[" .. table.concat(parts, " ") .. "]"
 end
 
 local function dw(s)

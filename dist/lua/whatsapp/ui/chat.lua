@@ -3,6 +3,7 @@ local format = require("whatsapp.format")
 
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
+local ns_hint = vim.api.nvim_create_namespace("whatsapp_chat_hint")
 local typing_frame = 0
 local typing_start = nil -- 0-based line where the typing rows begin, nil when hidden
 
@@ -57,7 +58,32 @@ function M.ensure_buf()
     S.opts.layout = S.opts.layout == "bubbles" and "lines" or "bubbles"
     M.render()
   end, "Toggle bubble/line layout")
+  vim.api.nvim_create_autocmd("CursorMoved", { buffer = buf, callback = M.update_hint })
   return buf
+end
+
+-- Media keys are not discoverable from the tag alone, so the row under the
+-- cursor gets an end-of-line hint, the way blame and inlay hints follow the
+-- cursor rather than cluttering every line.
+function M.update_hint()
+  local buf = S.bufs.chat
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buf, ns_hint, 0, -1)
+  if not S.win_valid("chat") then
+    return
+  end
+  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
+  local m = line_owner[row]
+  if not m or not m.media_type or m.media_type == "" then
+    return
+  end
+  local hint = m.cached and "gx open" or "<CR> download · gx open"
+  vim.api.nvim_buf_set_extmark(buf, ns_hint, row - 1, 0, {
+    virt_text = { { "  " .. hint, "Comment" } },
+    virt_text_pos = "eol",
+  })
 end
 
 function M.message_under_cursor()
@@ -116,8 +142,7 @@ local function splash(width, height)
     key("<CR>", "open chat")
     key("i", "open and compose")
     key("u", "next unread")
-    key("~", "toggle unread")
-    key("gU gu", "mark unread / read")
+    key("gU gu ~", "mark unread / read / toggle")
     key("<Tab>", "next pane")
     key("g?", "all keys")
     key("q", "close")
@@ -232,6 +257,7 @@ function M.render()
       vim.api.nvim_win_set_cursor(S.wins.chat, { #lines, 0 })
     end
   end
+  M.update_hint()
 end
 
 -- Update the typing indicator. Appearing or disappearing re-renders the

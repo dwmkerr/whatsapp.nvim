@@ -94,7 +94,7 @@ func dispatch(ctx context.Context, wa *WA, req Request) (interface{}, error) {
 		if err := params(req, &p); err != nil {
 			return nil, err
 		}
-		return wa.store.ListMessages(p.JID, p.Limit, p.Before)
+		return wa.ListMessages(p.JID, p.Limit, p.Before)
 	case "message.send":
 		var p struct {
 			JID     string `json:"jid"`

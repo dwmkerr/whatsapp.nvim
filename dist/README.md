@@ -72,8 +72,7 @@ Chat list (left):
 | `<CR>` `l` | Open chat |
 | `i` | Open chat and start composing |
 | `u` | Jump to next unread chat |
-| `~` | Toggle unread, mirrored to your phone |
-| `gU` `gu` | Mark unread / read |
+| `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
 | `R` | Refresh |
 | `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
@@ -89,8 +88,7 @@ Conversation (right):
 | `<CR>` `gf` | Download media under the cursor |
 | `gx` | Download if needed, then confirm before opening in its default application |
 | `K` | Load older messages |
-| `~` | Toggle unread |
-| `gU` `gu` | Mark chat unread (closes it) / read |
+| `gU` `gu` `~` | Mark chat unread (closes it) / read / toggle |
 | `L` | Toggle bubbles / lines |
 | `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
@@ -110,6 +108,8 @@ The compose pane appears once a chat is open. With no chat open the right pane s
 Multi-line messages work: write several lines, then `:w`.
 
 Each chat keeps its own draft and reply target in memory until Neovim exits. Switching chats or closing the WhatsApp tab preserves unsent drafts. A send response only clears the original draft if it has not been edited while sending.
+
+Media shows as a tag in the message: `[image photo.jpg]`, `[video clip.mp4 0:12]`, and voice notes as duration plus waveform, `[voice 0:42 ▁▃▇▂▅▁▇▃▂▁▅▂]`. A `✓` marks files already downloaded. Moving the cursor onto a media row shows the keys for it at the end of the line.
 
 Attachments download without opening an application. Use `gx` to open one, with confirmation for every file type. Downloads stream to a temporary file and are checked before entering the cache. Each attachment is limited to 25 MiB and 60 seconds, with at most two downloads at once. Larger attachments can be opened in the official WhatsApp client.
 

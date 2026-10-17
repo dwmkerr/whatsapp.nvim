@@ -329,6 +329,8 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 		MediaType:  e.MediaType,
 		Filename:   e.Filename,
 		QuotedID:   e.QuotedID,
+		Seconds:    e.Seconds,
+		Waveform:   e.Waveform,
 		raw:        raw,
 	}
 	name := w.chatName(ctx, chat, evt.Info.PushName, evt.Info.IsGroup)
@@ -695,6 +697,40 @@ var (
 // mediaPath builds <root>/<chat>/<id>-<name> from remote-controlled parts.
 // The chat JID, message ID and filename all come from the sender, so each is
 // reduced to a safe character set and the result must stay under root.
+// ListMessages fills in the media details the editor renders but the
+// store does not index: duration, waveform, and whether the file is already
+// in the cache. Decoded from the stored protobuf so old rows need no migration.
+func (w *WA) ListMessages(jid string, limit int, before int64) ([]Message, error) {
+	msgs, err := w.store.ListMessages(jid, limit, before)
+	if err != nil {
+		return nil, err
+	}
+	for i := range msgs {
+		w.decorate(&msgs[i])
+	}
+	return msgs, nil
+}
+
+func (w *WA) decorate(m *Message) {
+	if m.MediaType == "" || m.raw == nil {
+		return
+	}
+	var pm waE2E.Message
+	if proto.Unmarshal(m.raw, &pm) != nil {
+		return
+	}
+	e := extract(&pm)
+	m.Seconds = e.Seconds
+	m.Waveform = e.Waveform
+	path, err := mediaPath(filepath.Join(w.dir, "media"), m.ChatJID, m.ID, e.Filename)
+	if err != nil {
+		return
+	}
+	if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() {
+		m.Cached = true
+	}
+}
+
 func mediaPath(root, chatJID, msgID, filename string) (string, error) {
 	chat := unsafePathChars.ReplaceAllString(chatJID, "_")
 	id := unsafePathChars.ReplaceAllString(msgID, "_")

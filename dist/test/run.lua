@@ -35,6 +35,18 @@ return function()
   check(clines[4]:find("[image image.jpg]", 1, true) ~= nil, "media renders as a tag")
   check(#spans > 0, "spans emitted")
 
+  check(format.waveform({ 0, 100, 50, 0 }, 4) == "▁█▄▁", "waveform maps levels to blocks")
+  check(format.waveform({ 10, 10 }, 2) == "██", "waveform scales to the loudest sample")
+  check(format.waveform({}, 8) == "", "empty waveform renders nothing")
+  local vlines = format.conversation({
+    { id = "3", text = "", ts = 1760390000, from_me = false, sender_name = "Edward", sender = "x",
+      media_type = "voice", filename = "audio.ogg", seconds = 62, waveform = { 0, 100, 50, 0 }, cached = true },
+    { id = "4", text = "", ts = 1760390060, from_me = false, sender_name = "Edward", sender = "x",
+      media_type = "video", filename = "clip.mp4", seconds = 5 },
+  }, false)
+  check(vlines[2]:find("[voice 1:02 ▁█▄▁ ✓]", 1, true) ~= nil, "voice note shows duration, waveform and cached tick: " .. vlines[2])
+  check(vlines[3]:find("[video clip.mp4 0:05]", 1, true) ~= nil, "video keeps its filename and shows duration")
+
   local blines, bowners = format.bubbles({
     { id = "1", text = "a fairly long message that needs wrapping across lines", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },
     { id = "2", text = "ok", ts = 1760390060, from_me = true, sender_name = "me" },
@@ -126,6 +138,31 @@ return function()
     return l:find("me: from nvim", 1, true) ~= nil
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
+
+  -- Media hint follows the cursor: shown on a media row, cleared elsewhere.
+  local chat = require("whatsapp.ui.chat")
+  local hint_ns = vim.api.nvim_create_namespace("whatsapp_chat_hint")
+  local function hint_text()
+    local marks = vim.api.nvim_buf_get_extmarks(S.bufs.chat, hint_ns, 0, -1, { details = true })
+    return marks[1] and marks[1][4].virt_text[1][1] or nil
+  end
+  table.insert(S.messages["111@s.whatsapp.net"], { id = "v1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
+    sender_name = "Alice", text = "", ts = 1760400300, from_me = false, media_type = "voice", filename = "audio.ogg", seconds = 3 })
+  chat.render()
+  vim.api.nvim_set_current_win(S.wins.chat)
+  vim.cmd("normal! G")
+  chat.update_hint()
+  check(hint_text() == "  <CR> download · gx open", "media row under cursor shows the download hint")
+  vim.cmd("normal! gg")
+  chat.update_hint()
+  check(hint_text() == nil, "hint clears off media rows")
+  S.messages["111@s.whatsapp.net"][#S.messages["111@s.whatsapp.net"]].cached = true
+  chat.render()
+  vim.cmd("normal! G")
+  chat.update_hint()
+  check(hint_text() == "  gx open", "cached media row hints open only")
+  table.remove(S.messages["111@s.whatsapp.net"])
+  chat.render()
 
   -- Typing indicator: rows under the last message for the open chat only,
   -- cleared on pause.

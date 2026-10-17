@@ -35,8 +35,9 @@ func TestExtractImage(t *testing.T) {
 }
 
 func TestExtractVoiceNote(t *testing.T) {
-	e := extract(&waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true), Mimetype: proto.String("audio/ogg; codecs=opus")}})
-	if e.MediaType != "voice" || e.Filename != "audio.ogg" {
+	e := extract(&waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true), Mimetype: proto.String("audio/ogg; codecs=opus"),
+		Seconds: proto.Uint32(42), Waveform: []byte{0, 50, 100}}})
+	if e.MediaType != "voice" || e.Filename != "audio.ogg" || e.Seconds != 42 || len(e.Waveform) != 3 || e.Waveform[2] != 100 {
 		t.Fatalf("got %+v", e)
 	}
 }

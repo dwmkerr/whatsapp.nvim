@@ -13,7 +13,9 @@ type extracted struct {
 	MediaType string
 	Filename  string
 	QuotedID  string
-	Skip      bool // protocol noise with nothing to show
+	Seconds   int   // media duration
+	Waveform  []int // voice note levels, 0-100
+	Skip      bool  // protocol noise with nothing to show
 }
 
 // extract flattens the many waE2E.Message variants into text plus an
@@ -39,6 +41,7 @@ func extract(m *waE2E.Message) extracted {
 		e.MediaType = "video"
 		e.Text = m.VideoMessage.GetCaption()
 		e.Filename = filenameFor("video", m.VideoMessage.GetMimetype())
+		e.Seconds = int(m.VideoMessage.GetSeconds())
 		e.QuotedID = m.VideoMessage.GetContextInfo().GetStanzaID()
 	case m.AudioMessage != nil:
 		e.MediaType = "audio"
@@ -46,6 +49,10 @@ func extract(m *waE2E.Message) extracted {
 			e.MediaType = "voice"
 		}
 		e.Filename = filenameFor("audio", m.AudioMessage.GetMimetype())
+		e.Seconds = int(m.AudioMessage.GetSeconds())
+		for _, b := range m.AudioMessage.GetWaveform() {
+			e.Waveform = append(e.Waveform, int(b))
+		}
 	case m.DocumentMessage != nil:
 		e.MediaType = "document"
 		e.Text = m.DocumentMessage.GetCaption()
