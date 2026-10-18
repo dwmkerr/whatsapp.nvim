@@ -10,14 +10,14 @@ Install via your favourite plugin manager:
 
 ```vim
 " vim-plug
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist build' }
 ```
 
 ```lua
 -- lazy.nvim
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C dist",
+  build = "make -C dist build",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/dist")
     require("whatsapp").setup()
@@ -107,7 +107,7 @@ cd whatsapp.nvim
 make -C dist build
 
 # Don't forget to change vimrc/nvim config to:
-# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
+# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist build' }
 ```
 
 `make -C dist test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
