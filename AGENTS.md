@@ -7,6 +7,14 @@ Instructions for coding agents working in this repository. `CLAUDE.md` includes 
 - `dist/` is the plugin: Go bridge in `dist/bridge`, Lua in `dist/lua`, tests in `dist/test`. The joke in the root `README.md` is that `dist/` is "compiled output"; keep that framing.
 - Temporary files go in `./scratch/`, which is gitignored.
 
+## Branches and pull requests
+
+Never commit to `main` and never push to `main`. This holds for this repository and for every repository the maintainer owns or contributes to; it is the same rule as the maintainer's open-source project workflow. Every change, however small, goes on a branch and arrives through a pull request, including documentation, screenshots and one-line fixes.
+
+- Do not push anything unless asked. Pushing a branch to open a pull request the maintainer asked for counts as asked.
+- Never force-push unless the maintainer asks for that specific force-push.
+- If you find local commits on `main`, stop and ask before doing anything else.
+
 ## Working
 
 - Build with `make -C dist build`, test with `make -C dist test`. Run the tests before every commit and check the exit code, not just the tail of the output.

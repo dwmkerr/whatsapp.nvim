@@ -96,7 +96,7 @@ Conversation (right):
 | `gU` `gu` `~` | Mark chat unread (closes it) / read / toggle |
 | `L` | Toggle bubbles / lines |
 | `<Tab>` `<S-Tab>` | Cycle panes |
-| `g?` | Keys |
+| `g?` | All keys and commands |
 | `/` `n` `gg` `G` | Native search and movement |
 
 Compose (bottom):
@@ -108,9 +108,9 @@ Compose (bottom):
 | `<CR>` `gx` | Media menu / open media, in normal mode |
 | `]m` `[m` | Next / previous media |
 | `<Tab>` `<S-Tab>` | Cycle panes |
-| `g?` | Keys |
+| `g?` | All keys and commands |
 
-The compose pane appears once a chat is open. With no chat open the right pane shows bridge status and the main keys.
+The compose pane appears once a chat is open. With no chat open the right pane shows bridge status and the main keys. `g?` from any pane shows every key and command in that same pane; `q`, `<Esc>` or `g?` returns to where you were.
 
 Multi-line messages work: write several lines, then `:w`.
 

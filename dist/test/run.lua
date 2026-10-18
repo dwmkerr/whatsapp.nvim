@@ -200,6 +200,18 @@ return function()
   for _ = 1, 3 do table.remove(msgs) end
   chat.render()
 
+  -- g? takes over the chat pane from any pane and hands focus back on close.
+  vim.api.nvim_set_current_win(S.wins.list)
+  wa.toggle_help()
+  local help_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(S.help and vim.api.nvim_get_current_win() == S.wins.chat, "g? shows help in the chat pane and focuses it")
+  check(help_text:find("conversation", 1, true) ~= nil and help_text:find(":WhatsApp pair", 1, true) ~= nil, "help lists panes and commands")
+  wa.toggle_help()
+  local back_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(not S.help and vim.api.nvim_get_current_win() == S.wins.list, "closing help returns focus to the list")
+  check(back_text:find("hello", 1, true) ~= nil, "closing help restores the conversation")
+  vim.api.nvim_set_current_win(S.wins.chat)
+
   -- Typing indicator: rows under the last message for the open chat only,
   -- cleared on pause.
   local function typing_shown()
