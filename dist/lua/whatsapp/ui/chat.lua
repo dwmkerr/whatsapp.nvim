@@ -143,11 +143,9 @@ function M.update_hint()
     { "<CR>", "Special" }, { " menu · ", "Comment" },
     { "gx", "Special" }, { " open", "Comment" },
   }
-  if #media_rows > 1 then
-    chunks[#chunks + 1] = { " · ", "Comment" }
-    chunks[#chunks + 1] = { "]m [m", "Special" }
-    chunks[#chunks + 1] = { " media", "Comment" }
-  end
+  chunks[#chunks + 1] = { " · ", "Comment" }
+  chunks[#chunks + 1] = { "]m [m", "Special" }
+  chunks[#chunks + 1] = { " media", "Comment" }
   local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
   vim.api.nvim_buf_set_extmark(buf, ns_hint, row - 1, #line, {
     virt_text = chunks,
