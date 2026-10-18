@@ -134,8 +134,9 @@ function M.next_media(dir, from_edge)
 end
 
 -- Keys are not discoverable from the tag alone, so the target attachment
--- carries a hint at the end of its tag row: keys in Special, words in
--- Comment, like the splash. Inline so it wraps instead of clipping.
+-- carries a hint on a virtual line under its message: keys in Special,
+-- words in Comment, like the splash. Its own line, so it never wraps into
+-- the message text.
 function M.update_hint()
   local buf = S.bufs.chat
   if not (buf and vim.api.nvim_buf_is_valid(buf)) then
@@ -146,27 +147,22 @@ function M.update_hint()
   if not m then
     return
   end
-  local chunks = {
-    { "  ", "Comment" },
-    { "<CR>", "Special" }, { " menu · ", "Comment" },
-    { "gx", "Special" }, { " open", "Comment" },
-  }
-  chunks[#chunks + 1] = { " · ", "Comment" }
-  chunks[#chunks + 1] = { "]m [m", "Special" }
-  chunks[#chunks + 1] = { " media", "Comment" }
-  local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
-  vim.api.nvim_buf_set_extmark(buf, ns_hint, row - 1, #line, {
-    virt_text = chunks,
-    virt_text_pos = "inline",
-  })
-end
-
-function M.message_under_cursor()
-  if not S.win_valid("chat") then
-    return nil
+  local entry
+  for _, e in ipairs(media_rows) do
+    if e.m == m then
+      entry = e
+    end
   end
-  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
-  return line_owner[row]
+  local tag_line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+  local indent = tag_line:match("^%s*") .. "  "
+  vim.api.nvim_buf_set_extmark(buf, ns_hint, (entry and entry.last or row) - 1, 0, {
+    virt_lines = { {
+      { indent, "Comment" },
+      { "<CR>", "Special" }, { " menu · ", "Comment" },
+      { "gx", "Special" }, { " open · ", "Comment" },
+      { "[m ]m", "Special" }, { " prev / next", "Comment" },
+    } },
+  })
 end
 
 -- Text for the chat window when nothing is open: a short centred block
@@ -287,9 +283,14 @@ function M.render()
   media_rows = {}
   local seen = {}
   for i, m in pairs(owners) do
-    if m.media_type and m.media_type ~= "" and not seen[m] and lines[i]:find("[" .. m.media_type, 1, true) then
-      seen[m] = true
-      media_rows[#media_rows + 1] = { row = i, m = m }
+    if m.media_type and m.media_type ~= "" then
+      if not seen[m] and lines[i]:find("[" .. m.media_type, 1, true) then
+        seen[m] = { row = i, m = m, last = i }
+        media_rows[#media_rows + 1] = seen[m]
+      end
+      if seen[m] and i > seen[m].last then
+        seen[m].last = i
+      end
     end
   end
   table.sort(media_rows, function(a, b) return a.row < b.row end)

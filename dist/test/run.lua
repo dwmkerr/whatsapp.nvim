@@ -147,8 +147,8 @@ return function()
     local marks = vim.api.nvim_buf_get_extmarks(S.bufs.chat, hint_ns, 0, -1, { details = true })
     if not marks[1] then return nil end
     local parts = {}
-    for _, c in ipairs(marks[1][4].virt_text) do parts[#parts + 1] = c[1] end
-    return table.concat(parts), marks[1][2] + 1
+    for _, c in ipairs(marks[1][4].virt_lines[1]) do parts[#parts + 1] = c[1] end
+    return vim.trim(table.concat(parts)), marks[1][2] + 1
   end
   local msgs = S.messages["111@s.whatsapp.net"]
   check(hint() == nil, "no hint without media")
@@ -159,8 +159,8 @@ return function()
   vim.cmd("normal! gg")
   chat.update_hint()
   local h, hrow = hint()
-  check(h == "  <CR> menu · gx open · ]m [m media", "newest media carries the hint when the cursor is elsewhere: " .. tostring(h))
-  check(hrow == vim.api.nvim_buf_line_count(S.bufs.chat), "hint sits on the media row")
+  check(h == "<CR> menu · gx open · [m ]m prev / next", "newest media carries the hint when the cursor is elsewhere: " .. tostring(h))
+  check(hrow == vim.api.nvim_buf_line_count(S.bufs.chat), "hint hangs under the media message")
   local target = chat.media_target()
   check(target and target.id == "v1", "<CR> target falls back to the newest media")
   table.insert(msgs, { id = "t1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
@@ -170,7 +170,7 @@ return function()
   chat.render()
   vim.cmd("normal! gg")
   chat.update_hint()
-  check(select(1, hint()) == "  <CR> menu · gx open · ]m [m media", "hint keeps the same keys with several attachments")
+  check(select(1, hint()) == "<CR> menu · gx open · [m ]m prev / next", "hint keeps the same keys with several attachments")
   chat.next_media(1)
   check(chat.media_target().id == "v1", "]m from the top lands on the first attachment")
   chat.next_media(1)
