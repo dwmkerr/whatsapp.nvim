@@ -152,7 +152,8 @@ function M.update_hint()
   end
   local tag_line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
   local indent = tag_line:match("^%s*") .. "  "
-  vim.api.nvim_buf_set_extmark(buf, ns_hint, (entry and entry.last or row) - 1, 0, {
+  local anchor = entry and entry.last or row
+  vim.api.nvim_buf_set_extmark(buf, ns_hint, anchor - 1, 0, {
     virt_lines = { {
       { indent, "Comment" },
       { "<CR>", "Special" }, { " menu · ", "Comment" },
@@ -160,6 +161,16 @@ function M.update_hint()
       { "[m ]m", "Special" }, { " prev / next", "Comment" },
     } },
   })
+  -- Virtual lines under the last buffer line sit below the window edge when
+  -- the view was scrolled before they existed; re-anchor the bottom so the
+  -- hint is on screen whenever the cursor is at the end of the chat.
+  if S.win_valid("chat") and anchor == vim.api.nvim_buf_line_count(buf) then
+    vim.api.nvim_win_call(S.wins.chat, function()
+      if vim.api.nvim_win_get_cursor(0)[1] == anchor then
+        vim.cmd("normal! zb")
+      end
+    end)
+  end
 end
 
 function M.toggle_layout()
