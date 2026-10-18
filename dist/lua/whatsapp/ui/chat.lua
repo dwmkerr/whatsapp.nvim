@@ -1,5 +1,6 @@
 local S = require("whatsapp.state")
 local format = require("whatsapp.format")
+local help = require("whatsapp.ui.help")
 
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
@@ -10,7 +11,7 @@ local typing_start = nil -- 0-based line where the typing rows begin, nil when h
 -- Rows for the typing indicator in the open chat, nil when there is none.
 local function typing_rows(width)
   local t = S.typing
-  if not t or not S.current or t.jid ~= S.current or S.qr then
+  if not t or not S.current or t.jid ~= S.current or S.qr or S.help then
     return nil
   end
   if S.opts.layout == "bubbles" then
@@ -54,8 +55,19 @@ function M.ensure_buf()
   map("gu", function() wa.set_unread(S.current, false) end, "Mark chat read")
   map("<Tab>", function() wa.focus_next(1) end, "Next pane")
   map("<S-Tab>", function() wa.focus_next(-1) end, "Previous pane")
-  map("q", wa.close, "Close WhatsApp")
-  map("g?", function() require("whatsapp.ui.help").show("chat") end, "Keys")
+  map("q", function()
+    if S.help then
+      wa.toggle_help()
+    else
+      wa.close()
+    end
+  end, "Close help, or WhatsApp")
+  map("<Esc>", function()
+    if S.help then
+      wa.toggle_help()
+    end
+  end, "Close help")
+  map("g?", wa.toggle_help, "All keys")
   map("L", M.toggle_layout, "Toggle bubble/line layout")
   vim.api.nvim_create_autocmd("CursorMoved", { buffer = buf, callback = M.update_hint })
   return buf
@@ -281,7 +293,10 @@ function M.render()
   local lines, owners, spans
   -- A pending QR code takes the pane over even with a chat open: you can
   -- only be pairing because there is no session to read from anyway.
-  if not S.current or S.qr then
+  if S.help then
+    lines, spans = help.layout(width, height)
+    owners = {}
+  elseif not S.current or S.qr then
     lines, spans = splash(width, height)
     owners = {}
     -- A wrapped QR code cannot be scanned; let it run off the edge instead.
@@ -339,7 +354,13 @@ function M.render()
     local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
     follow = row >= old_count - 1
   end
-  rendered_jid = S.current
+  -- Help and the QR code park the cursor at the top; forget the chat so the
+  -- next conversation render follows the bottom again.
+  if S.help or S.qr then
+    rendered_jid = nil
+  else
+    rendered_jid = S.current
+  end
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -355,15 +376,15 @@ function M.render()
   end
 
   if S.win_valid("chat") then
-    local name = S.current and S.chat_title(S.current) or "WhatsApp"
+    local name = S.help and "WhatsApp keys" or (S.current and S.chat_title(S.current) or "WhatsApp")
     vim.wo[S.wins.chat].winbar = " " .. S.bar_text(name)
     -- The chat window is often not the current one (the list or compose
     -- pane has focus), and Neovim leaves a non-current window's topline
     -- alone when its buffer changes. Scroll explicitly inside the window so
     -- the view matches the cursor.
     vim.api.nvim_win_call(S.wins.chat, function()
-      if not S.current or S.qr then
-        -- Splash and QR code read from the top.
+      if S.help or not S.current or S.qr then
+        -- Help, splash and QR code read from the top.
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         vim.cmd("normal! zt")
       elseif follow then

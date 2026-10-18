@@ -531,6 +531,27 @@ function M.open_media(m)
   end
 end
 
+-- g? from any pane: the cheatsheet takes over the chat pane and focus
+-- moves there so q closes it; closing returns focus to where you were.
+function M.toggle_help()
+  if S.help then
+    S.help = false
+    chat.render()
+    if S.help_return and vim.api.nvim_win_is_valid(S.help_return) then
+      vim.api.nvim_set_current_win(S.help_return)
+    end
+    S.help_return = nil
+    return
+  end
+  if not S.win_valid("chat") then
+    return
+  end
+  S.help_return = vim.api.nvim_get_current_win()
+  S.help = true
+  vim.api.nvim_set_current_win(S.wins.chat)
+  chat.render()
+end
+
 -- ]m / [m from any pane: focus the chat and move to the attachment. The
 -- compose pane counts as the slot after the last one, so ]m past the end
 -- returns you to writing and [m from compose lands on the newest media.
@@ -719,6 +740,8 @@ function M.toggle()
 end
 
 function M.close()
+  S.help = false
+  S.help_return = nil
   stop_typing()
   set_presence(false)
   if S.layout_valid() then

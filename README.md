@@ -50,7 +50,7 @@ The list of chats is shown on the left. Threads with unread messages are shown i
 - `R` replies to the message under the cursor, `r` reacts to it
 - `K` loads older messages, `L` toggles between bubbles and plain lines
 - `:w` in the compose pane sends; multi-line messages work
-- `g?` lists every key for the pane you are in
+- `g?` shows every key and command in the right-hand pane, `q` returns
 
 Keys that act on the conversation also work from the chat list, so a shortcut never depends on which pane has focus.
 
