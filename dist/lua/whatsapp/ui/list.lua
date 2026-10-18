@@ -175,6 +175,10 @@ function M.render()
         break
       end
     end
+  elseif S.win_valid("list") and #chats > 0 and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 1 then
+    -- A fresh window opens on row 1, which would hide the f under the
+    -- cursor and make <CR> cycle the filter instead of opening a chat.
+    vim.api.nvim_win_set_cursor(S.wins.list, { 2, 0 })
   end
 end
 
