@@ -4,6 +4,7 @@ local M = {
   opts = nil,
   chats = {},        -- array of chat rows from the bridge, newest first
   chat_by_jid = {},
+  filter = "all",    -- chat list filter: all, unread or groups
   current = nil,     -- jid of the open conversation
   messages = {},     -- jid -> array of messages, oldest first
   drafts = {},      -- jid -> session-only compose buffer, reply and pending send
