@@ -72,6 +72,7 @@ Chat list (left):
 | `<CR>` `l` | Open chat |
 | `i` | Open chat and start composing |
 | `u` | Jump to next unread chat |
+| `f` | Cycle the filter: all / unread / groups |
 | `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
 | `R` | Refresh |
 | `gx` `]m` `[m` | Open / next / previous media in the open chat |
