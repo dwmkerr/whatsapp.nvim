@@ -534,9 +534,7 @@ function M.next_media(dir)
     return
   end
   local from_compose = S.win_valid("compose") and vim.api.nvim_get_current_win() == S.wins.compose
-  if from_compose then
-    vim.api.nvim_set_current_win(S.wins.chat)
-  end
+  vim.api.nvim_set_current_win(S.wins.chat)
   if chat.next_media(dir, from_compose) then
     return
   end

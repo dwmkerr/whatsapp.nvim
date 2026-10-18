@@ -74,9 +74,13 @@ Chat list (left):
 | `u` | Jump to next unread chat |
 | `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
 | `R` | Refresh |
+| `gx` `]m` `[m` | Open / next / previous media in the open chat |
+| `K` `L` | Older messages / toggle layout in the open chat |
 | `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
 | `q` | Close WhatsApp |
+
+Conversation keys that do not clash with list keys also work from the list, so a shortcut never depends on which pane has focus.
 
 Conversation (right):
 

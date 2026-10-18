@@ -56,10 +56,7 @@ function M.ensure_buf()
   map("<S-Tab>", function() wa.focus_next(-1) end, "Previous pane")
   map("q", wa.close, "Close WhatsApp")
   map("g?", function() require("whatsapp.ui.help").show("chat") end, "Keys")
-  map("L", function()
-    S.opts.layout = S.opts.layout == "bubbles" and "lines" or "bubbles"
-    M.render()
-  end, "Toggle bubble/line layout")
+  map("L", M.toggle_layout, "Toggle bubble/line layout")
   vim.api.nvim_create_autocmd("CursorMoved", { buffer = buf, callback = M.update_hint })
   return buf
 end
@@ -163,6 +160,19 @@ function M.update_hint()
       { "[m ]m", "Special" }, { " prev / next", "Comment" },
     } },
   })
+end
+
+function M.toggle_layout()
+  S.opts.layout = S.opts.layout == "bubbles" and "lines" or "bubbles"
+  M.render()
+end
+
+function M.message_under_cursor()
+  if not S.win_valid("chat") then
+    return nil
+  end
+  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
+  return line_owner[row]
 end
 
 -- Text for the chat window when nothing is open: a short centred block
