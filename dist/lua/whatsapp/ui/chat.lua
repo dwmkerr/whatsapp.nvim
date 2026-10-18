@@ -89,9 +89,11 @@ function M.media_target()
   return last.m, last.row
 end
 
--- ]m / [m: move the cursor to the next or previous attachment. Returns
--- false when there is none that way so the caller can fall through.
-function M.next_media(dir)
+-- ]m / [m: move the cursor to the next or previous attachment, counting
+-- from the cursor, or from before the first / after the last row when
+-- from_edge is set. Returns false when there is none that way so the
+-- caller can fall through.
+function M.next_media(dir, from_edge)
   if not S.win_valid("chat") then
     return false
   end
@@ -99,8 +101,13 @@ function M.next_media(dir)
     vim.notify("WhatsApp: no media in this chat", vim.log.levels.INFO)
     return false
   end
-  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
-  local cur = line_owner[row]
+  local row, cur
+  if from_edge then
+    row = dir > 0 and 0 or vim.api.nvim_buf_line_count(S.bufs.chat) + 1
+  else
+    row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
+    cur = line_owner[row]
+  end
   local target
   if dir > 0 then
     for _, e in ipairs(media_rows) do

@@ -536,11 +536,8 @@ function M.next_media(dir)
   local from_compose = S.win_valid("compose") and vim.api.nvim_get_current_win() == S.wins.compose
   if from_compose then
     vim.api.nvim_set_current_win(S.wins.chat)
-    if dir > 0 then
-      vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
-    end
   end
-  if chat.next_media(dir) then
+  if chat.next_media(dir, from_compose) then
     return
   end
   if dir > 0 and S.win_valid("compose") then
