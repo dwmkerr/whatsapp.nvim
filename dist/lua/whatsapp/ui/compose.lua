@@ -39,6 +39,13 @@ function M.ensure_buf(jid)
   vim.keymap.set("n", "g?", function() require("whatsapp.ui.help").show("compose") end, { buffer = buf, silent = true, desc = "Keys" })
   vim.keymap.set("n", "<Tab>", function() wa.focus_next(1) end, { buffer = buf, silent = true, desc = "Next pane" })
   vim.keymap.set("n", "<S-Tab>", function() wa.focus_next(-1) end, { buffer = buf, silent = true, desc = "Previous pane" })
+  -- Media keys work from here too; in normal mode <CR> and gx have no other
+  -- job in a compose buffer, and the chat pane is the obvious target.
+  local chat = require("whatsapp.ui.chat")
+  vim.keymap.set("n", "<CR>", function() wa.media_menu(chat.media_target()) end, { buffer = buf, silent = true, desc = "Media menu" })
+  vim.keymap.set("n", "gx", function() wa.open_media(chat.media_target()) end, { buffer = buf, silent = true, desc = "Open media" })
+  vim.keymap.set("n", "]m", function() wa.next_media(1) end, { buffer = buf, silent = true, desc = "Next media" })
+  vim.keymap.set("n", "[m", function() wa.next_media(-1) end, { buffer = buf, silent = true, desc = "Previous media" })
   return buf
 end
 

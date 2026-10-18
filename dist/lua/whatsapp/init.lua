@@ -526,6 +526,15 @@ function M.open_media(m)
   end
 end
 
+-- ]m / [m from any pane: focus the chat and move to the attachment.
+function M.next_media(dir)
+  if not S.win_valid("chat") then
+    return
+  end
+  vim.api.nvim_set_current_win(S.wins.chat)
+  chat.next_media(dir)
+end
+
 -- <CR> on media: one menu, so the only thing to learn is that <CR> acts on
 -- the attachment. The target is the media under the cursor, else the
 -- newest in the chat.
@@ -537,7 +546,7 @@ function M.media_menu(m)
   if not m.cached then
     items[#items + 1] = { "Download", function() fetch_media(m) end }
   end
-  items[#items + 1] = { "Open", function() M.open_media(m) end }
+  items[#items + 1] = { "Open  gx", function() M.open_media(m) end }
   items[#items + 1] = { "Copy path", function()
     if m.path then
       copy_path(m.path)
@@ -545,6 +554,11 @@ function M.media_menu(m)
       fetch_media(m, copy_path)
     end
   end }
+  -- Navigation lives in the menu too, so the first <CR> teaches ]m [m.
+  if chat.media_count() > 1 then
+    items[#items + 1] = { "Next media  ]m", function() M.next_media(1) end }
+    items[#items + 1] = { "Previous media  [m", function() M.next_media(-1) end }
+  end
   vim.ui.select(items, {
     prompt = (m.media_type or "media") .. (m.filename and m.filename ~= "" and (" " .. m.filename) or ""),
     format_item = function(item) return item[1] end,

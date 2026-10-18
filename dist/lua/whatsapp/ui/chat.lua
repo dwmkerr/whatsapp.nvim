@@ -46,8 +46,8 @@ function M.ensure_buf()
   map("r", function() wa.react_to(M.message_under_cursor()) end, "React to message")
   map("<CR>", function() wa.media_menu(M.media_target()) end, "Media menu")
   map("gx", function() wa.open_media(M.media_target()) end, "Open media")
-  map("]m", function() M.next_media(1) end, "Next media")
-  map("[m", function() M.next_media(-1) end, "Previous media")
+  map("]m", function() wa.next_media(1) end, "Next media")
+  map("[m", function() wa.next_media(-1) end, "Previous media")
   map("K", wa.load_older, "Load older messages")
   map("~", function() wa.toggle_unread(S.current) end, "Toggle unread")
   map("gU", function() wa.set_unread(S.current, true) end, "Mark chat unread and close it")
@@ -62,6 +62,10 @@ function M.ensure_buf()
   end, "Toggle bubble/line layout")
   vim.api.nvim_create_autocmd("CursorMoved", { buffer = buf, callback = M.update_hint })
   return buf
+end
+
+function M.media_count()
+  return #media_rows
 end
 
 -- The attachment that <CR> and gx act on: the media message under the

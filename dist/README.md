@@ -101,6 +101,8 @@ Compose (bottom):
 |---|---|
 | `:w` | Send |
 | `q` | Cancel reply |
+| `<CR>` `gx` | Media menu / open media, in normal mode |
+| `]m` `[m` | Next / previous media |
 | `<Tab>` `<S-Tab>` | Cycle panes |
 | `g?` | Keys |
 

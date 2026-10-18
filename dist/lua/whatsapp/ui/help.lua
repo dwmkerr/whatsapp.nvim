@@ -28,6 +28,8 @@ local keys = {
   compose = {
     { ":w", "send" },
     { "q", "cancel reply" },
+    { "<CR> gx", "media menu / open media (normal mode)" },
+    { "]m [m", "next / previous media" },
     { "<Tab>", "next pane" },
   },
 }

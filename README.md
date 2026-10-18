@@ -97,13 +97,9 @@ make -C dist build        # needs Go and a C compiler
 
 I have found that when working live in WhatsApp, the best flow is:
 
-```vim
-:WhatsApp logout
-:WhatsApp stop
-:PlugUpdate
-
-" Then in the terminal re-open with:
-nvim +WhatsApp
+```bash
+" Close vim, rebuild, run:
+make -C ~/repos/whatsapp.nvim/dist build && nvim +WhatsApp
 ```
 
 ## Other Notes
