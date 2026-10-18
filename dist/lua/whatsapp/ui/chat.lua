@@ -19,6 +19,7 @@ local function typing_rows(width)
   return { format.typing_line(t.who, typing_frame, t.media) }
 end
 local line_owner = {}
+local media_rows = {} -- { { row = 1-based tag row, m = message }, ... } in chat order
 local rendered_jid = nil -- chat shown by the previous render, for scroll follow
 
 function M.ensure_buf()
@@ -43,9 +44,10 @@ function M.ensure_buf()
   end
   map("R", function() wa.reply_to(M.message_under_cursor()) end, "Reply to message")
   map("r", function() wa.react_to(M.message_under_cursor()) end, "React to message")
-  map("<CR>", function() wa.download_media(M.message_under_cursor()) end, "Download media")
-  map("gf", function() wa.download_media(M.message_under_cursor()) end, "Download media")
-  map("gx", function() wa.open_media(M.message_under_cursor()) end, "Confirm and open media")
+  map("<CR>", function() wa.media_menu(M.media_target()) end, "Media menu")
+  map("gx", function() wa.open_media(M.media_target()) end, "Open media")
+  map("]m", function() M.next_media(1) end, "Next media")
+  map("[m", function() M.next_media(-1) end, "Previous media")
   map("K", wa.load_older, "Load older messages")
   map("~", function() wa.toggle_unread(S.current) end, "Toggle unread")
   map("gU", function() wa.set_unread(S.current, true) end, "Mark chat unread and close it")
@@ -62,27 +64,90 @@ function M.ensure_buf()
   return buf
 end
 
--- Media keys are not discoverable from the tag alone, so the row under the
--- cursor gets an end-of-line hint, the way blame and inlay hints follow the
--- cursor rather than cluttering every line.
+-- The attachment that <CR> and gx act on: the media message under the
+-- cursor, else the newest one in the chat. Returns message and its tag row.
+function M.media_target()
+  if #media_rows == 0 then
+    return nil
+  end
+  if S.win_valid("chat") then
+    local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
+    local m = line_owner[row]
+    if m and m.media_type and m.media_type ~= "" then
+      for _, e in ipairs(media_rows) do
+        if e.m == m then
+          return m, e.row
+        end
+      end
+    end
+  end
+  local last = media_rows[#media_rows]
+  return last.m, last.row
+end
+
+-- ]m / [m: move the cursor to the next or previous attachment.
+function M.next_media(dir)
+  if not S.win_valid("chat") then
+    return
+  end
+  if #media_rows == 0 then
+    vim.notify("WhatsApp: no media in this chat", vim.log.levels.INFO)
+    return
+  end
+  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
+  local cur = line_owner[row]
+  local target
+  if dir > 0 then
+    for _, e in ipairs(media_rows) do
+      if e.row > row and e.m ~= cur then
+        target = e
+        break
+      end
+    end
+  else
+    for i = #media_rows, 1, -1 do
+      local e = media_rows[i]
+      if e.row < row and e.m ~= cur then
+        target = e
+        break
+      end
+    end
+  end
+  if not target then
+    vim.notify("WhatsApp: no more media", vim.log.levels.INFO)
+    return
+  end
+  vim.api.nvim_win_set_cursor(S.wins.chat, { target.row, 0 })
+  M.update_hint()
+end
+
+-- Keys are not discoverable from the tag alone, so the target attachment
+-- carries a hint at the end of its tag row: keys in Special, words in
+-- Comment, like the splash. Inline so it wraps instead of clipping.
 function M.update_hint()
   local buf = S.bufs.chat
   if not (buf and vim.api.nvim_buf_is_valid(buf)) then
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, ns_hint, 0, -1)
-  if not S.win_valid("chat") then
+  local m, row = M.media_target()
+  if not m then
     return
   end
-  local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
-  local m = line_owner[row]
-  if not m or not m.media_type or m.media_type == "" then
-    return
+  local chunks = {
+    { "  ", "Comment" },
+    { "<CR>", "Special" }, { " menu · ", "Comment" },
+    { "gx", "Special" }, { " open", "Comment" },
+  }
+  if #media_rows > 1 then
+    chunks[#chunks + 1] = { " · ", "Comment" }
+    chunks[#chunks + 1] = { "]m [m", "Special" }
+    chunks[#chunks + 1] = { " media", "Comment" }
   end
-  local hint = m.cached and "gx open" or "<CR> download · gx open"
-  vim.api.nvim_buf_set_extmark(buf, ns_hint, row - 1, 0, {
-    virt_text = { { "  " .. hint, "Comment" } },
-    virt_text_pos = "eol",
+  local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+  vim.api.nvim_buf_set_extmark(buf, ns_hint, row - 1, #line, {
+    virt_text = chunks,
+    virt_text_pos = "inline",
   })
 end
 
@@ -208,6 +273,16 @@ function M.render()
     owners = {}
   end
   line_owner = owners
+  -- Tag row per media message: the first of its lines that holds the tag.
+  media_rows = {}
+  local seen = {}
+  for i, m in pairs(owners) do
+    if m.media_type and m.media_type ~= "" and not seen[m] and lines[i]:find("[" .. m.media_type, 1, true) then
+      seen[m] = true
+      media_rows[#media_rows + 1] = { row = i, m = m }
+    end
+  end
+  table.sort(media_rows, function(a, b) return a.row < b.row end)
 
   -- The indicator is real buffer text below the last message so following
   -- the bottom keeps it on screen; the timer rewrites just those rows.

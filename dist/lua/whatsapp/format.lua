@@ -89,9 +89,7 @@ local function media_tag(m)
       parts[#parts + 1] = wave
     end
   end
-  if m.cached then
-    parts[#parts + 1] = "✓"
-  end
+  parts[#parts + 1] = m.cached and "✓" or "⇣"
   return "[" .. table.concat(parts, " ") .. "]"
 end
 

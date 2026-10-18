@@ -34,7 +34,9 @@ local function define_highlights()
   hl("WhatsAppTime", { link = "Comment" })
   hl("WhatsAppSender", { link = "Identifier" })
   hl("WhatsAppMe", { link = "String" })
-  hl("WhatsAppMedia", { link = "Special" })
+  -- Underlined like a link: the tag responds to keys.
+  local special = vim.api.nvim_get_hl(0, { name = "Special", link = false })
+  hl("WhatsAppMedia", { fg = special.fg, underline = true })
   hl("WhatsAppSeparator", { link = "Comment" })
   hl("WhatsAppQuote", { link = "Comment" })
   hl("WhatsAppBubble", { link = "Normal" })
@@ -472,38 +474,85 @@ function M.react_to(m)
   end)
 end
 
-local function fetch_media(m, open)
+local function fetch_media(m, then_do)
   if not m or not m.media_type or m.media_type == "" then
     return
   end
-  notify("downloading " .. m.media_type .. "…")
+  notify((m.cached and "fetching " or "downloading ") .. m.media_type .. "…")
   client.request("media.download", { jid = m.chat_jid, id = m.id }, function(err, res)
     if err then
       notify("download failed: " .. err, vim.log.levels.ERROR)
       return
     end
     notify("saved to " .. res.path)
+    m.path = res.path
     if not m.cached then
       m.cached = true
       if S.current == m.chat_jid then
         chat.render()
       end
     end
-    if not open then return end
-    local choice = vim.fn.confirm("Open attachment in its default application?\n" .. res.path, "&Open\n&Cancel", 2)
-    if choice ~= 1 then
-      return
+    if then_do then
+      then_do(res.path)
     end
-    vim.ui.open(res.path)
   end)
 end
 
+local function confirm_open(path)
+  local choice = vim.fn.confirm("Open attachment in its default application?\n" .. path, "&Open\n&Cancel", 2)
+  if choice == 1 then
+    vim.ui.open(path)
+  end
+end
+
+local function copy_path(path)
+  vim.fn.setreg("+", path)
+  vim.fn.setreg('"', path)
+  notify("copied " .. path)
+end
+
 function M.download_media(m)
-  fetch_media(m, false)
+  fetch_media(m)
 end
 
 function M.open_media(m)
-  fetch_media(m, true)
+  if not m then
+    return
+  end
+  if m.path then
+    confirm_open(m.path)
+  else
+    fetch_media(m, confirm_open)
+  end
+end
+
+-- <CR> on media: one menu, so the only thing to learn is that <CR> acts on
+-- the attachment. The target is the media under the cursor, else the
+-- newest in the chat.
+function M.media_menu(m)
+  if not m then
+    return
+  end
+  local items = {}
+  if not m.cached then
+    items[#items + 1] = { "Download", function() fetch_media(m) end }
+  end
+  items[#items + 1] = { "Open", function() M.open_media(m) end }
+  items[#items + 1] = { "Copy path", function()
+    if m.path then
+      copy_path(m.path)
+    else
+      fetch_media(m, copy_path)
+    end
+  end }
+  vim.ui.select(items, {
+    prompt = (m.media_type or "media") .. (m.filename and m.filename ~= "" and (" " .. m.filename) or ""),
+    format_item = function(item) return item[1] end,
+  }, function(item)
+    if item then
+      item[2]()
+    end
+  end)
 end
 
 function M.focus_compose()

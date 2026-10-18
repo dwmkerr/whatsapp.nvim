@@ -29,19 +29,50 @@ Run `:WhatsApp pair`, then go to WhatsApp > Settings > Linked Devices to scan th
 
 ## Features
 
-Once you've ignored the instructions and just asked your agent to set it up for you, use `:WhatsApp` to open the main WhatsApp view. Everything will be explained, and you can use `g?` at any time for help and keybindings. Some of the neat things I was able to squeeze into a shell-script that is shorter than this paragraph:
+**Setup and Pairing**
 
-- Unread chats show in bold
-- `i` in the chat list to go straight into Insert (write message) mode)
-- Realtime updates when messages come in
-- Toggle read/unread
-- "Is typing" bubble in the open chat
-- Voice notes show duration and waveform
-- Refresh on demand if needed
+When you run `:WhatsApp` you'll get a splash screen showing the most essential shortcuts:
 
-If you want to improve it, please PR the raw code, not the compiled version. Some fun things to add:
+TODO Screenshot splash
 
-- Unread message count
+Use the `:WhatsApp pair` command to connect. On your mobile scan the QR code or go to Settings > Linked Devices and scan from there.
+
+TODO Screenshot QR code
+
+**Chats and Messages**
+
+The list of chats is shown on the left. Threads with unread messages are shown in bold. There are a few convenient helpers:
+
+- `i` compose message:
+- todo remind me pls
+- toggle read unread (as a reminder, think of read as lowercase and unread as uppercase)
+
+TODO Screenshot of main screen
+
+**Images**
+
+Images are shown inline if you have a terminal that supports them (XX such as). Download them with XX and download and open with YY:
+
+TODO screenshot
+
+**Attachments**
+
+With any attachment focused, use `XX` to download or `XX` to download and open. Please be careful, if someone has sent something malicious then in the worst case it could lead to code execution, I've made some best effort[^1 footnote on how I avoid code exection] attempts to block the most obvious risks but be mindful:
+
+TODO screenshot of voice attachment
+
+**Other Bits & Pieces**
+
+- When new messages come in, a notification is shown in the XX [remind me what the notification bar is]
+- The '...is typing' activity bubble is shown if you have a chat open and someone is typing, just like the app this only appears if the chat is focused and for a few seconds
+
+HEADING: Contributing
+
+Please feel free to share updates. If possible, also update the original instructions [TODO link to the shell script].
+
+There are open issues for ideas I've not got around to, here are some suggestions:
+
+- Unread message count TODO link to GH issue (best 3x?)
 - Image support for terminals that can handle it
 
 ## Building from Source

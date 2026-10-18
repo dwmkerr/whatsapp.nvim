@@ -32,7 +32,7 @@ return function()
   check(clines[1]:match("^── ") ~= nil, "conversation starts with a day separator")
   check(clines[2]:match("Alice: hi$") ~= nil and clines[3]:match("there$") ~= nil, "multi-line text continues indented")
   check(owners[3] and owners[3].id == "1", "continuation line maps to its message")
-  check(clines[4]:find("[image image.jpg]", 1, true) ~= nil, "media renders as a tag")
+  check(clines[4]:find("[image image.jpg ⇣]", 1, true) ~= nil, "media renders as a tag")
   check(#spans > 0, "spans emitted")
 
   check(format.waveform({ 0, 100, 50, 0 }, 4) == "▁█▄▁", "waveform maps levels to blocks")
@@ -45,7 +45,7 @@ return function()
       media_type = "video", filename = "clip.mp4", seconds = 5 },
   }, false)
   check(vlines[2]:find("[voice 1:02 ▁█▄▁ ✓]", 1, true) ~= nil, "voice note shows duration, waveform and cached tick: " .. vlines[2])
-  check(vlines[3]:find("[video clip.mp4 0:05]", 1, true) ~= nil, "video keeps its filename and shows duration")
+  check(vlines[3]:find("[video clip.mp4 0:05 ⇣]", 1, true) ~= nil, "video keeps its filename and shows duration")
 
   local blines, bowners = format.bubbles({
     { id = "1", text = "a fairly long message that needs wrapping across lines", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },
@@ -139,29 +139,48 @@ return function()
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
 
-  -- Media hint follows the cursor: shown on a media row, cleared elsewhere.
+  -- Media hint sits on the target attachment: under the cursor, else the
+  -- newest one. ]m / [m move between attachments.
   local chat = require("whatsapp.ui.chat")
   local hint_ns = vim.api.nvim_create_namespace("whatsapp_chat_hint")
-  local function hint_text()
+  local function hint()
     local marks = vim.api.nvim_buf_get_extmarks(S.bufs.chat, hint_ns, 0, -1, { details = true })
-    return marks[1] and marks[1][4].virt_text[1][1] or nil
+    if not marks[1] then return nil end
+    local parts = {}
+    for _, c in ipairs(marks[1][4].virt_text) do parts[#parts + 1] = c[1] end
+    return table.concat(parts), marks[1][2] + 1
   end
-  table.insert(S.messages["111@s.whatsapp.net"], { id = "v1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
+  local msgs = S.messages["111@s.whatsapp.net"]
+  check(hint() == nil, "no hint without media")
+  table.insert(msgs, { id = "v1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
     sender_name = "Alice", text = "", ts = 1760400300, from_me = false, media_type = "voice", filename = "audio.ogg", seconds = 3 })
   chat.render()
   vim.api.nvim_set_current_win(S.wins.chat)
-  vim.cmd("normal! G")
-  chat.update_hint()
-  check(hint_text() == "  <CR> download · gx open", "media row under cursor shows the download hint")
   vim.cmd("normal! gg")
   chat.update_hint()
-  check(hint_text() == nil, "hint clears off media rows")
-  S.messages["111@s.whatsapp.net"][#S.messages["111@s.whatsapp.net"]].cached = true
+  local h, hrow = hint()
+  check(h == "  <CR> menu · gx open", "newest media carries the hint when the cursor is elsewhere: " .. tostring(h))
+  check(hrow == vim.api.nvim_buf_line_count(S.bufs.chat), "hint sits on the media row")
+  local target = chat.media_target()
+  check(target and target.id == "v1", "<CR> target falls back to the newest media")
+  table.insert(msgs, { id = "t1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
+    sender_name = "Alice", text = "after", ts = 1760400400, from_me = false })
+  table.insert(msgs, { id = "v2", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
+    sender_name = "Alice", text = "", ts = 1760400500, from_me = false, media_type = "image", filename = "image.jpg", cached = true })
   chat.render()
-  vim.cmd("normal! G")
+  vim.cmd("normal! gg")
   chat.update_hint()
-  check(hint_text() == "  gx open", "cached media row hints open only")
-  table.remove(S.messages["111@s.whatsapp.net"])
+  check(select(1, hint()) == "  <CR> menu · gx open · ]m [m media", "hint names ]m [m when there are several attachments")
+  chat.next_media(1)
+  check(chat.media_target().id == "v1", "]m from the top lands on the first attachment")
+  chat.next_media(1)
+  check(chat.media_target().id == "v2", "]m again lands on the second")
+  chat.next_media(-1)
+  check(chat.media_target().id == "v1", "[m goes back")
+  local tag_line = vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false)
+  check(table.concat(tag_line, "\n"):find("[voice 0:03 ⇣]", 1, true) ~= nil, "undownloaded media shows ⇣")
+  check(table.concat(tag_line, "\n"):find("[image image.jpg ✓]", 1, true) ~= nil, "cached media shows ✓")
+  for _ = 1, 3 do table.remove(msgs) end
   chat.render()
 
   -- Typing indicator: rows under the last message for the open chat only,
