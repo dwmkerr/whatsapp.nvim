@@ -98,6 +98,7 @@ return function()
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
   check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
   check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
 
   -- f cycles the filter under the title; <CR> on the filter line does too.
   local list = require("whatsapp.ui.list")
