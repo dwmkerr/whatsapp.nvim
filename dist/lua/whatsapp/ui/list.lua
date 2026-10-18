@@ -144,7 +144,7 @@ function M.render()
     if n > 0 then
       bar = bar .. " · " .. n .. " unread"
     end
-    vim.wo[S.wins.list].winbar = bar .. " · g? help"
+    vim.wo[S.wins.list].winbar = bar .. " · f filter · g? help"
   end
   line_jids = jids
   local keep = M.jid_under_cursor() or S.current
