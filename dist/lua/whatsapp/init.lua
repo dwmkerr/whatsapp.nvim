@@ -323,6 +323,11 @@ function M.refresh_chats()
     S.set_chats(chats)
     if S.layout_valid() then
       list.render()
+      -- The splash quotes chat and unread counts, so it is stale until the
+      -- first list arrives.
+      if not S.current then
+        chat.render()
+      end
     end
   end)
 end

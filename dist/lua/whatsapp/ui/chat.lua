@@ -357,12 +357,20 @@ function M.render()
   if S.win_valid("chat") then
     local name = S.current and S.chat_title(S.current) or "WhatsApp"
     vim.wo[S.wins.chat].winbar = " " .. S.bar_text(name)
-    if not S.current or S.qr then
-      -- Splash and QR code read from the top.
-      vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
-    elseif follow then
-      vim.api.nvim_win_set_cursor(S.wins.chat, { #lines, 0 })
-    end
+    -- The chat window is often not the current one (the list or compose
+    -- pane has focus), and Neovim leaves a non-current window's topline
+    -- alone when its buffer changes. Scroll explicitly inside the window so
+    -- the view matches the cursor.
+    vim.api.nvim_win_call(S.wins.chat, function()
+      if not S.current or S.qr then
+        -- Splash and QR code read from the top.
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        vim.cmd("normal! zt")
+      elseif follow then
+        vim.api.nvim_win_set_cursor(0, { #lines, 0 })
+        vim.cmd("normal! zb")
+      end
+    end)
   end
   M.update_hint()
 end
