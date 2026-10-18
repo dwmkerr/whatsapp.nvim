@@ -43,7 +43,7 @@ function M.ensure_buf()
   map("K", wa.load_older, "Load older messages in the open chat")
   map("L", function() require("whatsapp.ui.chat").toggle_layout() end, "Toggle bubbles / lines")
   map("q", wa.close, "Close WhatsApp")
-  map("g?", function() require("whatsapp.ui.help").show("list") end, "Keys")
+  map("g?", wa.toggle_help, "All keys")
   return buf
 end
 

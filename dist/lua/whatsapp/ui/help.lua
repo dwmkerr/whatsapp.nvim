@@ -1,6 +1,14 @@
--- g? cheatsheet: a small float over the current window, closed by any of
--- q, <Esc> or g? again, or by leaving it.
+-- g? cheatsheet: every key and command, drawn in the chat pane like the
+-- splash so help always appears in the same place. q or g? returns.
 local M = {}
+
+local commands = {
+  { ":WhatsApp", "open, or jump to the WhatsApp tab" },
+  { ":WhatsApp Alice", "open the chat matching Alice" },
+  { ":WhatsApp pair", "link this device (shows the QR code)" },
+  { ":WhatsApp logout", "unlink this device" },
+  { ":WhatsApp stop", "close and stop the bridge" },
+}
 
 local keys = {
   list = {
@@ -12,6 +20,7 @@ local keys = {
     { "gx ]m [m", "open / next / previous media in the open chat" },
     { "K L", "older messages / toggle layout in the open chat" },
     { "<Tab>", "next pane" },
+    { "g?", "all keys" },
     { "q", "close WhatsApp" },
   },
   chat = {
@@ -36,39 +45,55 @@ local keys = {
   },
 }
 
-function M.show(kind)
-  local lines = {}
-  local width = 0
-  for _, k in ipairs(keys[kind] or {}) do
-    local line = string.format(" %-8s %s ", k[1], k[2])
-    lines[#lines + 1] = line
-    width = math.max(width, vim.fn.strdisplaywidth(line))
-  end
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = "wipe"
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "win",
-    win = vim.api.nvim_get_current_win(),
-    row = 0,
-    col = 1,
-    width = width,
-    height = #lines,
-    style = "minimal",
-    border = "rounded",
-    title = " keys ",
-    title_pos = "center",
-  })
-  local close = function()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
+
+local sections = {
+  { "commands", commands },
+  { "chat list", keys.list },
+  { "conversation", keys.chat },
+  { "compose", keys.compose },
+}
+
+-- Lines and highlight spans for the chat pane, centred like the splash.
+function M.layout(width, height)
+  local rows = { { text = "WhatsApp keys", hl = "Title" }, {} }
+  local keyw = 0
+  for _, sec in ipairs(sections) do
+    for _, k in ipairs(sec[2]) do
+      keyw = math.max(keyw, #k[1] + 2)
     end
   end
-  for _, lhs in ipairs({ "q", "<Esc>", "g?" }) do
-    vim.keymap.set("n", lhs, close, { buffer = buf, nowait = true, silent = true })
+  for i, sec in ipairs(sections) do
+    if i > 1 then
+      rows[#rows + 1] = {}
+    end
+    rows[#rows + 1] = { text = sec[1], hl = "Comment" }
+    for _, k in ipairs(sec[2]) do
+      rows[#rows + 1] = { key = k[1], text = k[2] }
+    end
   end
-  vim.api.nvim_create_autocmd("WinLeave", { buffer = buf, once = true, callback = close })
+  rows[#rows + 1] = {}
+  rows[#rows + 1] = { text = "q or g? returns", hl = "Comment" }
+
+  local block = 0
+  for _, r in ipairs(rows) do
+    r.line = r.key and (r.key .. string.rep(" ", keyw - #r.key) .. r.text) or (r.text or "")
+    block = math.max(block, vim.fn.strdisplaywidth(r.line))
+  end
+  local pad = string.rep(" ", math.max(0, math.floor((width - block) / 2)))
+  local lines, spans = {}, {}
+  for _ = 1, math.max(0, math.floor((height - #rows) / 2)) do
+    lines[#lines + 1] = ""
+  end
+  for _, r in ipairs(rows) do
+    local line = #lines
+    lines[#lines + 1] = r.line ~= "" and (pad .. r.line) or ""
+    if r.hl then
+      spans[#spans + 1] = { line, 0, -1, r.hl }
+    elseif r.key then
+      spans[#spans + 1] = { line, #pad, #pad + #r.key, "Special" }
+    end
+  end
+  return lines, spans
 end
 
 return M
