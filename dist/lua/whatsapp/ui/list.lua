@@ -115,14 +115,15 @@ function M.render()
   local lines, jids, unread = format.chat_list(chats, width)
 
   -- Row 1 is the filter line, so every chat row sits one below its index.
-  -- Two leading spaces line the labels up with chat names after the mark.
-  local header, spans, col = "  ", {}, 2
+  -- The key leads in Special like every other hint; the active chip is bold
+  -- rather than coloured so it never reads as a key.
+  local header, spans, col = "f ", { { 0, 1, "Special" } }, 2
   for i, f in ipairs(filters) do
     if i > 1 then
       header = header .. "  "
       col = col + 2
     end
-    spans[#spans + 1] = { col, col + #f.label, f.id == S.filter and "Special" or "Comment" }
+    spans[#spans + 1] = { col, col + #f.label, f.id == S.filter and "WhatsAppFilter" or "Comment" }
     header = header .. f.label
     col = col + #f.label
   end
@@ -144,7 +145,7 @@ function M.render()
     if n > 0 then
       bar = bar .. " · " .. n .. " unread"
     end
-    vim.wo[S.wins.list].winbar = bar .. " · f filter · g? help"
+    vim.wo[S.wins.list].winbar = bar .. " · g? help"
   end
   line_jids = jids
   local keep = M.jid_under_cursor() or S.current
