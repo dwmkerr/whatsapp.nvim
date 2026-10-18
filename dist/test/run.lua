@@ -330,6 +330,13 @@ return function()
   local back_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(not S.help and vim.api.nvim_get_current_win() == S.wins.list, "closing help returns focus to the list")
   check(back_text:find("hello", 1, true) ~= nil, "closing help restores the conversation")
+  -- Opening a chat while help is up dismisses it; the conversation wins.
+  wa.toggle_help()
+  vim.api.nvim_set_current_win(S.wins.list)
+  wa.open_chat("111@s.whatsapp.net")
+  local opened_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(not S.help and S.help_return == nil, "opening a chat clears the help flag")
+  check(opened_text:find("hello", 1, true) ~= nil and opened_text:find("WhatsApp keys", 1, true) == nil, "opening a chat replaces help with the conversation")
   vim.api.nvim_set_current_win(S.wins.chat)
 
   -- Typing indicator: rows under the last message for the open chat only,
