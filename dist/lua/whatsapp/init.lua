@@ -332,10 +332,19 @@ function M.refresh_chats()
   end)
 end
 
+-- Help is a flag the chat pane renders over everything else, so any action
+-- that gives the pane new content has to drop it first. Focus stays put:
+-- the caller decides where the user ends up.
+local function dismiss_help()
+  S.help = false
+  S.help_return = nil
+end
+
 function M.open_chat(jid)
   if not jid then
     return
   end
+  dismiss_help()
   if S.current ~= jid then
     stop_typing()
   end
@@ -740,8 +749,7 @@ function M.toggle()
 end
 
 function M.close()
-  S.help = false
-  S.help_return = nil
+  dismiss_help()
   stop_typing()
   set_presence(false)
   if S.layout_valid() then
@@ -764,6 +772,7 @@ function M.pair()
   if not client.running() then
     return
   end
+  dismiss_help()
   S.pairing = true
   chat.render()
   client.request("pair.start", nil, function(err)
