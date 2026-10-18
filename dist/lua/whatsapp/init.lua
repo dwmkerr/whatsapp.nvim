@@ -526,13 +526,30 @@ function M.open_media(m)
   end
 end
 
--- ]m / [m from any pane: focus the chat and move to the attachment.
+-- ]m / [m from any pane: focus the chat and move to the attachment. The
+-- compose pane counts as the slot after the last one, so ]m past the end
+-- returns you to writing and [m from compose lands on the newest media.
 function M.next_media(dir)
   if not S.win_valid("chat") then
     return
   end
-  vim.api.nvim_set_current_win(S.wins.chat)
-  chat.next_media(dir)
+  local from_compose = S.win_valid("compose") and vim.api.nvim_get_current_win() == S.wins.compose
+  if from_compose then
+    vim.api.nvim_set_current_win(S.wins.chat)
+    if dir > 0 then
+      vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
+    end
+  end
+  if chat.next_media(dir) then
+    return
+  end
+  if dir > 0 and S.win_valid("compose") then
+    vim.api.nvim_set_current_win(S.wins.compose)
+    if not from_compose then
+      return
+    end
+  end
+  notify("no more media")
 end
 
 -- <CR> on media: one menu, so the only thing to learn is that <CR> acts on

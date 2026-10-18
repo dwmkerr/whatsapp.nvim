@@ -89,14 +89,15 @@ function M.media_target()
   return last.m, last.row
 end
 
--- ]m / [m: move the cursor to the next or previous attachment.
+-- ]m / [m: move the cursor to the next or previous attachment. Returns
+-- false when there is none that way so the caller can fall through.
 function M.next_media(dir)
   if not S.win_valid("chat") then
-    return
+    return false
   end
   if #media_rows == 0 then
     vim.notify("WhatsApp: no media in this chat", vim.log.levels.INFO)
-    return
+    return false
   end
   local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
   local cur = line_owner[row]
@@ -118,11 +119,11 @@ function M.next_media(dir)
     end
   end
   if not target then
-    vim.notify("WhatsApp: no more media", vim.log.levels.INFO)
-    return
+    return false
   end
   vim.api.nvim_win_set_cursor(S.wins.chat, { target.row, 0 })
   M.update_hint()
+  return true
 end
 
 -- Keys are not discoverable from the tag alone, so the target attachment
