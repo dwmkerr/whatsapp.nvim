@@ -109,6 +109,7 @@ return function()
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
   check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
+  check(vim.wo[S.wins.list].winbar:find("f filter", 1, true) ~= nil, "list title names the filter key")
 
   -- f cycles the filter under the title; <CR> on the filter line does too.
   local list = require("whatsapp.ui.list")

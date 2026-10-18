@@ -45,7 +45,7 @@ The list of chats is shown on the left. Threads with unread messages are shown i
 
 - `<CR>` opens the chat under the cursor, `i` opens it and starts composing
 - `u` jumps to the next unread chat
-- `f` cycles the filter line under the title: all, unread, groups (`<CR>` on that line does the same)
+- `f` cycles the filter shown under the title: all, unread, groups (`<CR>` on that line does the same)
 - `gU` / `gu` / `~` mark unread / read / toggle, mirrored to your phone (as a reminder, think of read as lowercase and unread as uppercase)
 - `<Tab>` / `<S-Tab>` cycle between the list, the conversation and the compose pane
 - `R` replies to the message under the cursor, `r` reacts to it
