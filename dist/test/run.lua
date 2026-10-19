@@ -290,22 +290,23 @@ return function()
     check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
     check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
     S.opts.layout = "lines"
-    -- View: a float the size of the fitted picture, closed by q.
-    local before = #vim.api.nvim_list_wins()
-    check(images.view(msgs[#msgs]) == true, "view accepts a cached picture in kitty mode")
-    check(wait_for(function() return images.viewing() end, 5000), "view opens a float")
-    local vwin = vim.api.nvim_get_current_win()
-    local vcfg = vim.api.nvim_win_get_config(vwin)
-    check(vcfg.relative == "editor" and vcfg.width >= 1 and vcfg.height >= 1, "view float sits over the editor")
-    check(#vim.api.nvim_buf_get_lines(0, 0, -1, false) == vcfg.height, "view float holds one placeholder row per line")
+    -- View: the picture takes over the chat pane, q brings the chat back.
+    vim.api.nvim_set_current_win(S.wins.list)
+    wa.view_image(msgs[#msgs])
+    check(S.view == msgs[#msgs] and vim.api.nvim_get_current_win() == S.wins.chat, "view takes the chat pane and focus")
+    local placeholder = vim.fn.nr2char(0x10EEEE)
+    check(wait_for(function()
+      return table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find(placeholder, 1, true) ~= nil
+    end, 5000), "view fills the pane with the placeholder grid")
+    check(vim.wo[S.wins.chat].winbar:find("q closes", 1, true) ~= nil, "view names its exit in the title")
+    check(#image_marks() == 0, "no inline picture while viewing")
     vim.api.nvim_feedkeys("q", "x", false)
-    check(not images.viewing() and #vim.api.nvim_list_wins() == before, "q closes the view")
-    vim.api.nvim_set_current_win(S.wins.chat)
+    check(S.view == nil and table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find("hello", 1, true) ~= nil, "q restores the conversation")
     msgs[#msgs].path = nil
     images._set_mode("tag")
     chat.render()
     check(#image_marks() == 0, "back to tag mode clears the rows")
-    check(images.view(msgs[#msgs]) == false, "view is a no-op in tag mode")
+    check(images.full(msgs[#msgs], 40, 20) == nil, "full is a no-op in tag mode")
   else
     io.stderr:write("skip: no image converter on this machine\n")
   end

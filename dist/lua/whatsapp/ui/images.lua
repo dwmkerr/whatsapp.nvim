@@ -275,7 +275,9 @@ local function to_png(src, cb)
     end
   end
   if not cmd then
-    finish()
+    -- Always deliver later: callers call this from a render and re-render
+    -- on completion, which must not nest inside the first one.
+    vim.schedule(finish)
     return
   end
   vim.system(cmd, { text = false }, function(res)
@@ -382,66 +384,61 @@ function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
   vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = rows, virt_lines_above = box ~= nil })
 end
 
--- Zoom: the whole picture, uncropped, in a float over the editor. q,
--- <Esc> or <CR> closes. Only meaningful in kitty mode.
-local view_win
-function M.view(m)
+-- Zoom: the whole picture, uncropped, fitted to cols x rows for the chat
+-- pane takeover. Returns the ready entry, or nil while converting (the
+-- chat re-renders when it is done).
+local full = {} -- source path -> entry fitted for the pane
+function M.full(m, cols, rows)
   if M.mode() ~= "kitty" or not m or not m.path then
-    return false
+    return nil
   end
-  if view_win and vim.api.nvim_win_is_valid(view_win) then
-    vim.api.nvim_win_close(view_win, true)
+  local entry = full[m.path]
+  if entry and entry.state == "ready" and entry.max_cols == cols and entry.max_rows == rows then
+    return entry
   end
+  if entry and entry.state == "pending" then
+    return nil
+  end
+  entry = { state = "pending", max_cols = cols, max_rows = rows }
+  full[m.path] = entry
   to_png(m.path, function(png, w, h)
     if not png then
+      entry.state = "failed"
       vim.notify("WhatsApp: could not read " .. m.path, vim.log.levels.WARN)
       return
     end
     local cw, ch = cell_size()
-    local cols, rows = M.fit(w, h, vim.o.columns - 4, vim.o.lines - 4, cw, ch)
+    entry.cols, entry.rows = M.fit(w, h, cols, rows, cw, ch)
+    entry.png = png
     next_id = next_id + 1
-    local entry = { id = next_id, cols = cols, rows = rows, png = png }
-    transmit(entry)
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].bufhidden = "wipe"
-    local grid = M.placeholder_lines(entry.id, cols, rows, "")
-    local lines = {}
-    for i, r in ipairs(grid) do
-      lines[i] = r[2][1]
+    entry.id = next_id
+    entry.state = "ready"
+    if S.view == m then
+      require("whatsapp.ui.chat").render()
     end
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    for i = 1, #lines do
-      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, { end_col = #lines[i], hl_group = grid[i][2][2] })
-    end
-    vim.bo[buf].modifiable = false
-    view_win = vim.api.nvim_open_win(buf, true, {
-      relative = "editor",
-      width = cols,
-      height = rows,
-      row = math.floor((vim.o.lines - rows) / 2) - 1,
-      col = math.floor((vim.o.columns - cols) / 2),
-      style = "minimal",
-      border = "rounded",
-      title = " " .. (m.filename and m.filename ~= "" and m.filename or "image") .. " · q closes ",
-      title_pos = "center",
-    })
-    local function close()
-      if view_win and vim.api.nvim_win_is_valid(view_win) then
-        vim.api.nvim_win_close(view_win, true)
-      end
-      view_win = nil
-      write(M.kitty_cmd({ a = "d", d = "i", i = entry.id, q = 2 }))
-    end
-    for _, key in ipairs({ "q", "<Esc>", "<CR>" }) do
-      vim.keymap.set("n", key, close, { buffer = buf, nowait = true, silent = true })
-    end
-    vim.api.nvim_create_autocmd("WinLeave", { buffer = buf, once = true, callback = close })
   end)
-  return true
+  return nil
 end
 
-function M.viewing()
-  return view_win ~= nil and vim.api.nvim_win_is_valid(view_win)
+-- Lines and spans for the takeover: the picture centred in width x height.
+function M.full_layout(m, width, height)
+  local entry = M.full(m, width - 2, height - 1)
+  local lines, spans = {}, {}
+  if not entry then
+    local text = "loading picture…"
+    for _ = 1, math.floor(height / 2) do lines[#lines + 1] = "" end
+    lines[#lines + 1] = string.rep(" ", math.max(0, math.floor((width - #text) / 2))) .. text
+    spans[1] = { #lines - 1, 0, -1, "Comment" }
+    return lines, spans
+  end
+  transmit(entry)
+  local pad = string.rep(" ", math.max(0, math.floor((width - entry.cols) / 2)))
+  for _ = 1, math.max(0, math.floor((height - entry.rows) / 2)) do lines[#lines + 1] = "" end
+  for _, r in ipairs(M.placeholder_lines(entry.id, entry.cols, entry.rows, pad)) do
+    lines[#lines + 1] = r[1][1] .. r[2][1]
+    spans[#spans + 1] = { #lines - 1, #pad, #lines[#lines], r[2][2] }
+  end
+  return lines, spans
 end
 
 -- Forget transmitted images so a new session starts clean; the terminal
@@ -452,6 +449,7 @@ function M.reset()
   end
   sent = {}
   cache = {}
+  full = {}
   asked = {}
 end
 

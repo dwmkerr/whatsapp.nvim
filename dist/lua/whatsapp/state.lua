@@ -16,6 +16,7 @@ local M = {
   just_paired = false,
   help = false,      -- g? cheatsheet shown in the chat pane
   help_return = nil, -- window to focus again when the cheatsheet closes
+  view = nil,        -- image message shown alone in the chat pane (zoom)
   qr = nil,          -- pairing QR lines while a pair.start is waiting for a scan
   pairing = false,   -- pair.start sent, QR code not here yet
   typing = nil,      -- { jid, sender, who, media } while the other party types in the open chat

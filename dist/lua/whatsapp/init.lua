@@ -342,6 +342,7 @@ function M.open_chat(jid)
   if not jid then
     return
   end
+  S.view = nil
   if S.current ~= jid then
     stop_typing()
   end
@@ -537,6 +538,23 @@ function M.open_media(m)
   end
 end
 
+-- Zoom: the picture takes over the chat pane, like help does, so nothing
+-- is drawn twice. q, <Esc> or <CR> bring the conversation back.
+function M.view_image(m)
+  if not (m and m.path) or not S.win_valid("chat") then
+    return
+  end
+  S.help = false
+  S.view = m
+  vim.api.nvim_set_current_win(S.wins.chat)
+  chat.render()
+end
+
+function M.close_view()
+  S.view = nil
+  chat.render()
+end
+
 -- g? from any pane: the cheatsheet takes over the chat pane and focus
 -- moves there so q closes it; closing returns focus to where you were.
 function M.toggle_help()
@@ -554,6 +572,7 @@ function M.toggle_help()
   end
   S.help_return = vim.api.nvim_get_current_win()
   S.help = true
+  S.view = nil
   vim.api.nvim_set_current_win(S.wins.chat)
   chat.render()
 end
@@ -592,9 +611,9 @@ function M.media_menu(m)
   if m.media_type == "image" and images.mode() == "kitty" then
     items[#items + 1] = { "View", function()
       if m.path then
-        images.view(m)
+        M.view_image(m)
       else
-        fetch_media(m, function() images.view(m) end)
+        fetch_media(m, function() M.view_image(m) end)
       end
     end }
   end
@@ -759,6 +778,7 @@ end
 function M.close()
   S.help = false
   S.help_return = nil
+  S.view = nil
   require("whatsapp.ui.images").reset()
   stop_typing()
   set_presence(false)
