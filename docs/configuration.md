@@ -15,8 +15,9 @@ require("whatsapp").setup({
   layout = "bubbles",                            -- "bubbles" or "lines", L toggles at runtime
   images = {
     mode = "auto",                               -- "auto", "tag" or "kitty"
-    max_width = 60,                              -- cells
-    max_height = 12,                             -- rows
+    max_width = 60,                              -- cells, pictures fill the bubble up to this
+    max_height = 20,                             -- rows, also capped at half the pane
+    crop = true,                                 -- centre-crop taller pictures instead of shrinking them
   },
 })
 ```
@@ -34,7 +35,7 @@ An image message always has a tag line, `[image photo.jpg ✓]`, which is what `
 
 Only files already on disk are drawn: pictures you have downloaded, or that arrived earlier and are in the cache. Nothing is fetched from the network to render a chat.
 
-`max_width` and `max_height` bound the picture in cells. The aspect ratio is kept, so one of the two is usually the limit.
+Pictures are sized like the phone does it: they fill the bubble's width (at most `max_width` cells, never larger than the picture itself), the height follows the aspect ratio up to `max_height` rows or half the pane, and anything taller is centre-cropped. `gx` still opens the whole file. `crop = false` shrinks tall pictures to fit instead.
 
 ### tmux
 

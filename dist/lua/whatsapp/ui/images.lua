@@ -24,7 +24,7 @@ end
 
 local resolved -- mode in use, nil until the first image asks
 local converter -- { name, png = fn(src, dst) }
-local cache = {} -- source path -> { state, max_cols, cols, rows, png, id }
+local cache = {} -- source path -> { state, max_cols, max_rows, cols, rows, crop, png, id }
 local sent = {} -- kitty id -> true once the terminal holds the image
 local passthrough_set = false
 local asked = {} -- message id -> true once its cached path was requested
@@ -47,6 +47,24 @@ function M.fit(w, h, max_cols, max_rows, cell_w, cell_h)
     cols = math.max(1, math.ceil(rows * cell_h * w / h / cell_w))
   end
   return cols, rows
+end
+
+-- WhatsApp's rule: fill the width, let the height follow the aspect up to
+-- a cap, then centre-crop the rest. Returns cols, rows and a source
+-- rectangle {x, y, w, h} in pixels when a crop is needed. Small pictures
+-- are not blown up past their own size.
+function M.fit_fill(w, h, cols, max_rows, cell_w, cell_h)
+  if w <= 0 or h <= 0 then
+    return 0, 0
+  end
+  cols = math.max(1, math.min(cols, math.ceil(w / cell_w)))
+  local rows = math.max(1, math.ceil(cols * cell_w * h / w / cell_h))
+  if rows <= max_rows then
+    return cols, rows
+  end
+  rows = max_rows
+  local crop_h = math.min(h, math.floor(rows * cell_h * w / (cols * cell_w)))
+  return cols, rows, { x = 0, y = math.floor((h - crop_h) / 2), w = w, h = crop_h }
 end
 
 -- Width and height from a PNG's IHDR chunk, which always follows the
@@ -207,8 +225,11 @@ local function transmit(entry)
   end
   sent[entry.id] = true
   -- t=f hands the terminal a path, so no chunking and no base64 of pixels.
-  write(M.kitty_cmd({ a = "T", f = 100, t = "f", U = 1, q = 2, i = entry.id, c = entry.cols, r = entry.rows },
-    vim.base64.encode(entry.png)))
+  local opts = { a = "T", f = 100, t = "f", U = 1, q = 2, i = entry.id, c = entry.cols, r = entry.rows }
+  if entry.crop then
+    opts.x, opts.y, opts.w, opts.h = entry.crop.x, entry.crop.y, entry.crop.w, entry.crop.h
+  end
+  write(M.kitty_cmd(opts, vim.base64.encode(entry.png)))
 end
 
 -- Conversion -----------------------------------------------------------------
@@ -230,10 +251,9 @@ local function read_file(path)
 end
 
 -- Start preparing an image; re-render the chat when it is ready.
-local function prepare(src, jid, max_cols)
-  local entry = { state = "pending", max_cols = max_cols }
+local function prepare(src, jid, max_cols, max_rows)
+  local entry = { state = "pending", max_cols = max_cols, max_rows = max_rows }
   cache[src] = entry
-  local max_rows = S.opts.images.max_height
   local dst, cmd
   if src:lower():match("%.png$") then
     dst = src
@@ -252,7 +272,11 @@ local function prepare(src, jid, max_cols)
       return
     end
     local cw, ch = cell_size()
-    entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
+    if S.opts.images.crop == false then
+      entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
+    else
+      entry.cols, entry.rows, entry.crop = M.fit_fill(w, h, max_cols, max_rows, cw, ch)
+    end
     entry.png = dst
     next_id = next_id + 1
     entry.id = next_id
@@ -284,7 +308,7 @@ end
 
 -- The converted entry for m fitted to max_cols, starting conversion (or a
 -- refit after a resize) when there is none. nil until it is ready.
-local function entry_for(m, max_cols)
+local function entry_for(m, max_cols, max_rows)
   if M.mode() == "tag" or m.media_type ~= "image" then
     return nil
   end
@@ -306,17 +330,18 @@ local function entry_for(m, max_cols)
     return nil
   end
   max_cols = math.max(1, math.min(S.opts.images.max_width, max_cols))
+  max_rows = math.max(1, math.min(S.opts.images.max_height, max_rows))
   local entry = cache[m.path]
-  if not entry or (entry.state ~= "pending" and entry.max_cols ~= max_cols) then
-    prepare(m.path, m.chat_jid, max_cols)
+  if not entry or (entry.state ~= "pending" and (entry.max_cols ~= max_cols or entry.max_rows ~= max_rows)) then
+    prepare(m.path, m.chat_jid, max_cols, max_rows)
     return nil
   end
   return entry.state == "ready" and entry or nil
 end
 
--- Cells the picture for m takes when fitted to max_cols, nil until known.
-function M.size(m, max_cols)
-  local entry = entry_for(m, max_cols)
+-- Cells the picture for m takes when fitted to the box, nil until known.
+function M.size(m, max_cols, max_rows)
+  local entry = entry_for(m, max_cols, max_rows)
   if entry then
     return entry.cols, entry.rows
   end
@@ -326,8 +351,8 @@ end
 -- Hang the picture for message m as virtual lines. `box` frames it inside
 -- a bubble: rows get the bubble's side borders and padding and sit above
 -- the footer row (anchor); without it rows hang below anchor at indent.
-function M.place(buf, anchor, indent, m, max_cols, box)
-  local entry = entry_for(m, max_cols)
+function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
+  local entry = entry_for(m, max_cols, max_rows)
   if not entry then
     return
   end

@@ -24,8 +24,9 @@ local defaults = {
   layout = "bubbles", -- or "lines"
   images = {
     mode = "auto", -- "auto" | "tag" | "kitty", see docs/configuration.md
-    max_width = 60, -- cells
-    max_height = 12, -- rows
+    max_width = 60, -- cells; pictures fill the bubble up to this
+    max_height = 20, -- rows, also capped at half the pane
+    crop = true, -- centre-crop pictures taller than max_height rather than shrink them
   },
 }
 

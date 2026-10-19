@@ -294,6 +294,8 @@ function M.render()
   -- Same box rule as format.bubbles, so a picture is fitted to the widest
   -- bubble the pane allows.
   local bubble_inner_max = math.max(24, math.floor(width * 0.7)) - 4
+  -- A picture never takes more than half the pane, whatever the option.
+  local image_rows = math.max(1, math.floor(height / 2))
   local lines, owners, spans
   -- A pending QR code takes the pane over even with a chat open: you can
   -- only be pairing because there is no session to read from anyway.
@@ -309,7 +311,7 @@ function M.render()
     end
   elseif S.opts.layout == "bubbles" then
     lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width, function(m)
-      return images.size(m, bubble_inner_max)
+      return images.size(m, bubble_inner_max, image_rows)
     end)
   else
     lines, owners, spans = format.conversation(msgs, chat and chat.is_group)
@@ -381,11 +383,11 @@ function M.render()
         local footer = lines[e.last] or ""
         local indent = footer:match("^%s*")
         local inner = vim.fn.strdisplaywidth(footer) - #indent - 4
-        images.place(buf, e.last, indent, e.m, bubble_inner_max,
+        images.place(buf, e.last, indent, e.m, bubble_inner_max, image_rows,
           { inner = inner, hl = e.m.from_me and "WhatsAppBubbleMe" or "WhatsAppBubble" })
       else
         local indent = (lines[e.row] or ""):match("^%s*") .. "  "
-        images.place(buf, e.last, indent, e.m, width - #indent - 1)
+        images.place(buf, e.last, indent, e.m, width - #indent - 1, image_rows)
       end
     end
   end
