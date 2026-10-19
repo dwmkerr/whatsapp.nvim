@@ -222,8 +222,8 @@ local function splash(width, height)
     rows[#rows + 1] = { key = k, text = text }
   end
   if not client.running() then
-    note("bridge not running")
-    key(":WhatsApp", "restarts it")
+    note(S.fatal or "bridge not running")
+    key(":WhatsApp", S.fatal and "tries again" or "restarts it")
   elseif S.qr then
     note("scan with WhatsApp > Linked Devices > Link a Device")
     if height < #S.qr + 4 or width < vim.fn.strdisplaywidth(S.qr[1]) then
@@ -243,6 +243,9 @@ local function splash(width, height)
     key(":WhatsApp pair", "links this device")
     rows[#rows + 1] = {}
     note("then scan the code with WhatsApp > Linked Devices")
+  elseif S.replaced then
+    note("another client took over this session")
+    key(":WhatsApp stop", "then :WhatsApp reconnects")
   elseif not S.status.connected then
     note("connecting…")
   elseif S.sync and not S.synced then
