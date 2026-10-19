@@ -587,6 +587,17 @@ function M.media_menu(m)
     return
   end
   local items = {}
+  local images = require("whatsapp.ui.images")
+  -- Zoom first, so <CR><CR> on a picture is the quick look.
+  if m.media_type == "image" and images.mode() == "kitty" then
+    items[#items + 1] = { "View", function()
+      if m.path then
+        images.view(m)
+      else
+        fetch_media(m, function() images.view(m) end)
+      end
+    end }
+  end
   if not m.cached then
     items[#items + 1] = { "Download", function() fetch_media(m) end }
   end

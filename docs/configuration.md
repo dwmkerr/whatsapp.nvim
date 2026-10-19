@@ -33,6 +33,8 @@ An image message always has a tag line, `[image photo.jpg ✓]`, which is what `
 
 `auto`, the default, is `kitty` when the terminal is detected (by `TERM_PROGRAM`, `KITTY_WINDOW_ID`, `TERM` or, inside tmux, the terminal name tmux learned from the outer client, which works even when a shell forces `TERM=xterm-256color`) and a converter is installed, `tag` otherwise. Pin `kitty` to skip detection, for instance under a multiplexer that hides the terminal; it still needs the converter.
 
+In `kitty` mode the `<CR>` menu on a picture starts with **View**: the whole picture, uncropped, in a float over the editor. `q`, `<Esc>` or `<CR>` closes it. `gx` still opens the file in your image viewer.
+
 Only files already on disk are drawn: pictures you have downloaded, or that arrived earlier and are in the cache. Nothing is fetched from the network to render a chat.
 
 Pictures are sized like the phone does it: they fill the bubble's width (at most `max_width` cells, never larger than the picture itself), the height follows the aspect ratio up to `max_height` rows or half the pane, and anything taller is centre-cropped. `gx` still opens the whole file. `crop = false` shrinks tall pictures to fit instead.

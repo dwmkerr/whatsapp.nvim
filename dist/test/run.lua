@@ -290,10 +290,22 @@ return function()
     check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
     check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
     S.opts.layout = "lines"
+    -- View: a float the size of the fitted picture, closed by q.
+    local before = #vim.api.nvim_list_wins()
+    check(images.view(msgs[#msgs]) == true, "view accepts a cached picture in kitty mode")
+    check(wait_for(function() return images.viewing() end, 5000), "view opens a float")
+    local vwin = vim.api.nvim_get_current_win()
+    local vcfg = vim.api.nvim_win_get_config(vwin)
+    check(vcfg.relative == "editor" and vcfg.width >= 1 and vcfg.height >= 1, "view float sits over the editor")
+    check(#vim.api.nvim_buf_get_lines(0, 0, -1, false) == vcfg.height, "view float holds one placeholder row per line")
+    vim.api.nvim_feedkeys("q", "x", false)
+    check(not images.viewing() and #vim.api.nvim_list_wins() == before, "q closes the view")
+    vim.api.nvim_set_current_win(S.wins.chat)
     msgs[#msgs].path = nil
     images._set_mode("tag")
     chat.render()
     check(#image_marks() == 0, "back to tag mode clears the rows")
+    check(images.view(msgs[#msgs]) == false, "view is a no-op in tag mode")
   else
     io.stderr:write("skip: no image converter on this machine\n")
   end

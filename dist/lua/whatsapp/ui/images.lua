@@ -250,16 +250,17 @@ local function read_file(path)
   return data
 end
 
--- Start preparing an image; re-render the chat when it is ready.
-local function prepare(src, jid, max_cols, max_rows)
-  local entry = { state = "pending", max_cols = max_cols, max_rows = max_rows }
-  cache[src] = entry
+-- PNG for src, converting once into the cache dir. cb(png, w, h), or
+-- cb(nil) when the file cannot be read or converted.
+local function to_png(src, cb)
   local dst, cmd
   if src:lower():match("%.png$") then
     dst = src
   else
     dst = cache_dir() .. "/" .. vim.fn.sha256(src):sub(1, 16) .. ".png"
-    cmd = converter.png(src, dst)
+    if not read_file(dst) then
+      cmd = converter.png(src, dst)
+    end
   end
   local function finish()
     local data = read_file(dst)
@@ -268,21 +269,9 @@ local function prepare(src, jid, max_cols, max_rows)
       w, h = M.png_size(data)
     end
     if not w then
-      entry.state = "failed"
-      return
-    end
-    local cw, ch = cell_size()
-    if S.opts.images.crop == false then
-      entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
+      cb(nil)
     else
-      entry.cols, entry.rows, entry.crop = M.fit_fill(w, h, max_cols, max_rows, cw, ch)
-    end
-    entry.png = dst
-    next_id = next_id + 1
-    entry.id = next_id
-    entry.state = "ready"
-    if S.current == jid then
-      require("whatsapp.ui.chat").render()
+      cb(dst, w, h)
     end
   end
   if not cmd then
@@ -292,11 +281,36 @@ local function prepare(src, jid, max_cols, max_rows)
   vim.system(cmd, { text = false }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
-        entry.state = "failed"
-        return
+        cb(nil)
+      else
+        finish()
       end
-      finish()
     end)
+  end)
+end
+
+-- Start preparing an image for the chat; re-render when it is ready.
+local function prepare(src, jid, max_cols, max_rows)
+  local entry = { state = "pending", max_cols = max_cols, max_rows = max_rows }
+  cache[src] = entry
+  to_png(src, function(png, w, h)
+    if not png then
+      entry.state = "failed"
+      return
+    end
+    local cw, ch = cell_size()
+    if S.opts.images.crop == false then
+      entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
+    else
+      entry.cols, entry.rows, entry.crop = M.fit_fill(w, h, max_cols, max_rows, cw, ch)
+    end
+    entry.png = png
+    next_id = next_id + 1
+    entry.id = next_id
+    entry.state = "ready"
+    if S.current == jid then
+      require("whatsapp.ui.chat").render()
+    end
   end)
 end
 
@@ -366,6 +380,68 @@ function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
     end
   end
   vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = rows, virt_lines_above = box ~= nil })
+end
+
+-- Zoom: the whole picture, uncropped, in a float over the editor. q,
+-- <Esc> or <CR> closes. Only meaningful in kitty mode.
+local view_win
+function M.view(m)
+  if M.mode() ~= "kitty" or not m or not m.path then
+    return false
+  end
+  if view_win and vim.api.nvim_win_is_valid(view_win) then
+    vim.api.nvim_win_close(view_win, true)
+  end
+  to_png(m.path, function(png, w, h)
+    if not png then
+      vim.notify("WhatsApp: could not read " .. m.path, vim.log.levels.WARN)
+      return
+    end
+    local cw, ch = cell_size()
+    local cols, rows = M.fit(w, h, vim.o.columns - 4, vim.o.lines - 4, cw, ch)
+    next_id = next_id + 1
+    local entry = { id = next_id, cols = cols, rows = rows, png = png }
+    transmit(entry)
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].bufhidden = "wipe"
+    local grid = M.placeholder_lines(entry.id, cols, rows, "")
+    local lines = {}
+    for i, r in ipairs(grid) do
+      lines[i] = r[2][1]
+    end
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    for i = 1, #lines do
+      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, { end_col = #lines[i], hl_group = grid[i][2][2] })
+    end
+    vim.bo[buf].modifiable = false
+    view_win = vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      width = cols,
+      height = rows,
+      row = math.floor((vim.o.lines - rows) / 2) - 1,
+      col = math.floor((vim.o.columns - cols) / 2),
+      style = "minimal",
+      border = "rounded",
+      title = " " .. (m.filename and m.filename ~= "" and m.filename or "image") .. " · q closes ",
+      title_pos = "center",
+    })
+    local function close()
+      if view_win and vim.api.nvim_win_is_valid(view_win) then
+        vim.api.nvim_win_close(view_win, true)
+      end
+      view_win = nil
+      write(M.kitty_cmd({ a = "d", d = "i", i = entry.id, q = 2 }))
+    end
+    for _, key in ipairs({ "q", "<Esc>", "<CR>" }) do
+      vim.keymap.set("n", key, close, { buffer = buf, nowait = true, silent = true })
+    end
+    vim.api.nvim_create_autocmd("WinLeave", { buffer = buf, once = true, callback = close })
+  end)
+  return true
+end
+
+function M.viewing()
+  return view_win ~= nil and vim.api.nvim_win_is_valid(view_win)
 end
 
 -- Forget transmitted images so a new session starts clean; the terminal
