@@ -131,10 +131,11 @@ require("whatsapp").setup({
   notify = true,            -- vim.notify for messages in chats you are not viewing
   mark_read_on_view = true, -- send read receipts when you open a chat
   default_reaction = "👍",
+  images = { mode = "auto" }, -- "tag", "ascii" or "kitty"; auto picks the best available
 })
 ```
 
-Highlight groups: `WhatsAppUnread`, `WhatsAppCurrent`, `WhatsAppTime`, `WhatsAppSender`, `WhatsAppMe`, `WhatsAppMedia`, `WhatsAppSeparator`, `WhatsAppQuote`.
+Every option, the image modes and what they need, and the highlight groups are in [`docs/configuration.md`](../docs/configuration.md).
 
 ## Develop
 

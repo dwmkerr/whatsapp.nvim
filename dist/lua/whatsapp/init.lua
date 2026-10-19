@@ -22,6 +22,11 @@ local defaults = {
   mark_read_on_view = true,
   default_reaction = "👍",
   layout = "bubbles", -- or "lines"
+  images = {
+    mode = "auto", -- "auto" | "tag" | "ascii" | "kitty", see docs/configuration.md
+    max_width = 60, -- cells
+    max_height = 12, -- rows
+  },
 }
 
 local function define_highlights()
@@ -742,6 +747,7 @@ end
 function M.close()
   S.help = false
   S.help_return = nil
+  require("whatsapp.ui.images").reset()
   stop_typing()
   set_presence(false)
   if S.layout_valid() then

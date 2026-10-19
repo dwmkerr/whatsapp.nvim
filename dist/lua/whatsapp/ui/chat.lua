@@ -1,6 +1,7 @@
 local S = require("whatsapp.state")
 local format = require("whatsapp.format")
 local help = require("whatsapp.ui.help")
+local images = require("whatsapp.ui.images")
 
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
@@ -366,6 +367,15 @@ function M.render()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  -- Pictures hang under the last line of their message, at the tag's
+  -- indent, so they sit inside the bubble's column and above the hint.
+  images.clear(buf)
+  for _, e in ipairs(media_rows) do
+    if e.m.media_type == "image" then
+      local indent = (lines[e.row] or ""):match("^%s*") .. "  "
+      images.place(buf, e.last, indent, e.m)
+    end
+  end
   for _, s in ipairs(spans) do
     local line, cs, ce, group = s[1], s[2], s[3], s[4]
     if ce == -1 then
