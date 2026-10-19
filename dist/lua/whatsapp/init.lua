@@ -551,8 +551,12 @@ function M.view_image(m)
 end
 
 function M.close_view()
+  local m = S.view
   S.view = nil
   chat.render()
+  local images = require("whatsapp.ui.images")
+  images.release_full(m)
+  images.repaint()
 end
 
 -- g? from any pane: the cheatsheet takes over the chat pane and focus
@@ -565,6 +569,7 @@ function M.toggle_help()
       vim.api.nvim_set_current_win(S.help_return)
     end
     S.help_return = nil
+    require("whatsapp.ui.images").repaint()
     return
   end
   if not S.win_valid("chat") then

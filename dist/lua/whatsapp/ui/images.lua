@@ -421,6 +421,26 @@ function M.full(m, cols, rows)
 end
 
 -- Lines and spans for the takeover: the picture centred in width x height.
+-- Placeholder cells confuse tmux's change tracking: after a picture leaves
+-- the screen the outer terminal can keep stale cells. Ask for a full
+-- repaint of the client, then of Neovim's own screen.
+function M.repaint()
+  if vim.env.TMUX then
+    pcall(vim.fn.system, { "tmux", "refresh-client" })
+  end
+  vim.cmd("redraw!")
+end
+
+-- Drop the zoomed picture from the terminal once it is off screen.
+function M.release_full(m)
+  local entry = m and m.path and full[m.path]
+  if entry and entry.state == "ready" then
+    write(M.kitty_cmd({ a = "d", d = "i", i = entry.id, q = 2 }))
+    sent[entry.id] = nil
+    full[m.path] = nil
+  end
+end
+
 function M.full_layout(m, width, height)
   local entry = M.full(m, width - 2, height - 1)
   local lines, spans = {}, {}
