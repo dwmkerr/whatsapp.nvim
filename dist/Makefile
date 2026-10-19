@@ -10,6 +10,10 @@ build: bin/wa-bridge # Build the Go bridge into bin/wa-bridge.
 bin/wa-bridge: $(wildcard bridge/*.go) bridge/go.mod bridge/go.sum
 	cd bridge && CGO_ENABLED=1 go build -ldflags "-s -w" -o ../bin/wa-bridge .
 
+.PHONY: dev
+dev: build # Build the bridge and open Neovim on this checkout with WhatsApp.
+	nvim --cmd "set rtp^=$(CURDIR)" +WhatsApp
+
 .PHONY: test
 test: test-go test-lua # Run the Go and Lua test suites.
 
