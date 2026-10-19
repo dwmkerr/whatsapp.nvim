@@ -405,6 +405,27 @@ return function()
   wa.focus_next(-1)
   check(vim.api.nvim_get_current_win() == S.wins.list, "S-Tab moves back")
 
+  -- A second bridge on the same store is refused: one message, not a
+  -- "bridge failed" plus a "bridge exited" pair.
+  local notes, real_notify = {}, vim.notify
+  vim.notify = function(msg) notes[#notes + 1] = msg end
+  events["fatal"]({ error = "WhatsApp client already connected on pid 42" })
+  events["exit"]({ code = 1, stderr = {} })
+  check(#notes == 1 and notes[1]:find("pid 42", 1, true) ~= nil, "refused start notifies once with the holder pid")
+  check(S.fatal ~= nil, "refused start is remembered for the splash")
+  events["ready"]({ paired = true, connected = false })
+  check(S.fatal == nil, "ready clears the refusal")
+
+  -- Another client taking the session is a disconnect the bridge reports;
+  -- the editor must stop claiming it is connected.
+  notes = {}
+  events["disconnected"]({ reason = "replaced" })
+  check(S.status.connected == false and S.replaced, "replaced session shows as disconnected")
+  check(#notes == 1 and notes[1]:find("another client", 1, true) ~= nil, "replaced session warns once")
+  events["connected"]()
+  check(S.status.connected and not S.replaced, "reconnect clears the takeover")
+  vim.notify = real_notify
+
   require("test.security")(check, events)
 
   -- pair.qr renders the code in the chat pane splash, pair.ok clears it.

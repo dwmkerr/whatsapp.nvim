@@ -186,6 +186,11 @@ func (w *WA) handleEvent(evt interface{}) {
 		}
 	case *events.Disconnected:
 		w.out.Emit("disconnected", nil)
+	case *events.StreamReplaced:
+		// Another client connected with this session, so the server closed
+		// ours. whatsmeow expects this disconnect and neither reports it nor
+		// reconnects, so without this the editor keeps showing "connected".
+		w.out.Emit("disconnected", map[string]string{"reason": "replaced"})
 	case *events.LoggedOut:
 		w.out.Emit("logged_out", map[string]string{"reason": v.Reason.String()})
 	case *events.ChatPresence:

@@ -33,7 +33,17 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := os.MkdirAll(*dir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	out := NewWriter(os.Stdout)
+	lock, err := lockStore(*dir)
+	if err != nil {
+		out.Emit("fatal", map[string]string{"error": err.Error()})
+		os.Exit(1)
+	}
+	defer lock.Close()
 	wa, err := NewWA(ctx, *dir, out)
 	if err != nil {
 		out.Emit("fatal", map[string]string{"error": err.Error()})
