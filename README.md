@@ -66,7 +66,9 @@ Please be careful. If someone has sent something malicious then in the worst cas
 
 **Images**
 
-Pictures hang under their tag in terminals that speak the Kitty graphics protocol, such as Ghostty or kitty, and `<CR>` then `View` zooms one to fill the pane; elsewhere you get the tag line and `gx` opens the file. The default detects which you have. See [Configuration](./docs/configuration.md#images) for the `images` options and what the picture mode needs.
+In a terminal that speaks the Kitty graphics protocol, such as Ghostty or kitty, pictures show inside their bubble. `<CR>` then `View` zooms one to fill the pane, `q` brings the chat back. Elsewhere you get the tag line and `gx` opens the file. The default detects which you have; see [Configuration](./docs/configuration.md#images) for the `images` options.
+
+![Picture inside its bubble in Ghostty](./docs/images.png)
 
 **Other Bits & Pieces**
 
