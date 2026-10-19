@@ -127,6 +127,8 @@ local function wire_events()
   client.clear_listeners()
   client.on("ready", function(data)
     S.status = data
+    S.fatal = nil
+    S.replaced = false
     chat.render()
   end)
   client.on("unpaired", function()
@@ -136,13 +138,18 @@ local function wire_events()
   end)
   client.on("connected", function()
     S.status.connected = true
+    S.replaced = false
     chat.render()
     M.refresh_chats()
     -- Contacts may have synced after history on a previous run.
     client.request("names.refresh", nil, function() end)
   end)
-  client.on("disconnected", function()
+  client.on("disconnected", function(d)
     S.status.connected = false
+    if d and d.reason == "replaced" then
+      S.replaced = true
+      notify("another client took over this session, run :WhatsApp stop then :WhatsApp", vim.log.levels.WARN)
+    end
     chat.render()
   end)
   client.on("logged_out", function(d)
@@ -232,10 +239,12 @@ local function wire_events()
     M.refresh_chats()
   end)
   client.on("fatal", function(d)
-    notify("bridge failed: " .. d.error, vim.log.levels.ERROR)
+    S.fatal = d.error
+    notify(d.error, vim.log.levels.ERROR)
   end)
   client.on("exit", function(d)
-    if d.code ~= 0 then
+    -- A refused start already explained itself through "fatal".
+    if d.code ~= 0 and not S.fatal then
       notify("bridge exited with code " .. d.code .. "\n" .. table.concat(d.stderr, "\n"), vim.log.levels.ERROR)
     end
     chat.render()

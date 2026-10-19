@@ -11,6 +11,8 @@ local M = {
   wins = { list = nil, chat = nil, compose = nil },
   bufs = { list = nil, chat = nil, compose = nil },
   status = { paired = nil, connected = false }, -- paired unknown until "ready"
+  fatal = nil, -- why the bridge refused to start, shown on the splash
+  replaced = false, -- another client took the session; no reconnect is coming
   synced = false,    -- offline sync finished for this bridge run
   sync = nil,        -- last sync.progress payload while history loads
   just_paired = false,
