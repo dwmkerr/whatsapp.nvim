@@ -27,7 +27,9 @@ local converter -- { name, png = fn(src, dst) }
 local cache = {} -- source path -> { state, max_cols, max_rows, cols, rows, crop, png, id }
 local sent = {} -- kitty id -> true once the terminal holds the image
 local passthrough_set = false
-local asked = {} -- message id -> true once its cached path was requested
+local paths = {} -- message id -> path; message objects are rebuilt on every reopen
+local asked = {} -- message id -> true while a path request is in flight
+local shown = "" -- signature of the placements drawn by the last render
 -- Ids are per terminal, not per Neovim, so start from the pid to keep two
 -- editors in one window apart. Kept under 2^24 to fit a 24-bit colour.
 local next_id = (vim.fn.getpid() % 4096) * 4096
@@ -318,8 +320,24 @@ end
 
 -- Rendering ------------------------------------------------------------------
 
+local placed = {}
 function M.clear(buf)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  placed = {}
+end
+
+-- After a render: when the set of pictures on screen changed, cells that
+-- held placeholders need a repaint the terminal will not do by itself.
+function M.commit()
+  table.sort(placed)
+  local sig = table.concat(placed, ";")
+  if sig ~= shown then
+    local had = shown ~= ""
+    shown = sig
+    if had then
+      vim.schedule(M.repaint)
+    end
+  end
 end
 
 -- The converted entry for m fitted to max_cols, starting conversion (or a
@@ -328,15 +346,21 @@ local function entry_for(m, max_cols, max_rows)
   if M.mode() == "tag" or m.media_type ~= "image" then
     return nil
   end
-  if not m.path then
+  if m.path then
+    paths[m.id] = m.path
+  elseif paths[m.id] then
+    m.path = paths[m.id]
+  else
     -- History arrives with the cached flag but no path; the bridge answers
     -- for cached files without touching the network.
     if m.cached and not asked[m.id] then
       asked[m.id] = true
       client.request("media.download", { jid = m.chat_jid, id = m.id }, function(err, res)
+        asked[m.id] = nil
         if err or not res or not res.path then
           return
         end
+        paths[m.id] = res.path
         m.path = res.path
         if S.current == m.chat_jid then
           require("whatsapp.ui.chat").render()
@@ -382,6 +406,7 @@ function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
     end
   end
   vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = rows, virt_lines_above = box ~= nil })
+  placed[#placed + 1] = entry.id .. "@" .. anchor
 end
 
 -- Zoom: the whole picture, uncropped, fitted to cols x rows for the chat
@@ -452,6 +477,7 @@ function M.full_layout(m, width, height)
     return lines, spans
   end
   transmit(entry)
+  placed[#placed + 1] = "full:" .. entry.id
   local pad = string.rep(" ", math.max(0, math.floor((width - entry.cols) / 2)))
   for _ = 1, math.max(0, math.floor((height - entry.rows) / 2)) do lines[#lines + 1] = "" end
   for _, r in ipairs(M.placeholder_lines(entry.id, entry.cols, entry.rows, pad)) do
@@ -471,6 +497,8 @@ function M.reset()
   cache = {}
   full = {}
   asked = {}
+  paths = {}
+  shown = ""
 end
 
 -- Tests run headless and need a known mode.

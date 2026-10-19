@@ -290,6 +290,13 @@ return function()
     check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
     check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
     S.opts.layout = "lines"
+    -- Reopening a chat rebuilds its message objects without the path; the
+    -- picture must survive that.
+    local old_m = msgs[#msgs]
+    msgs[#msgs] = { id = old_m.id, chat_jid = old_m.chat_jid, sender = old_m.sender, sender_name = old_m.sender_name,
+      text = "", ts = old_m.ts, from_me = false, media_type = "image", filename = "image.jpg", cached = true }
+    chat.render()
+    check(wait_for(function() return #image_marks() > 0 end, 5000) and msgs[#msgs].path == fixture, "a rebuilt message without a path still shows its picture")
     -- View: the picture takes over the chat pane, q brings the chat back.
     vim.api.nvim_set_current_win(S.wins.list)
     wa.view_image(msgs[#msgs])

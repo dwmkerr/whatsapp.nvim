@@ -313,6 +313,7 @@ function M.render()
     lines, spans = help.layout(width, height)
     owners = {}
   elseif S.view then
+    images.clear(buf)
     lines, spans = images.full_layout(S.view, width, height)
     owners = {}
   elseif not S.current or S.qr then
@@ -434,6 +435,7 @@ function M.render()
     end)
   end
   M.update_hint()
+  images.commit()
 end
 
 -- Update the typing indicator. Appearing or disappearing re-renders the
