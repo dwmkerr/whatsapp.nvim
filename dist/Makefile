@@ -11,7 +11,7 @@ test-go:
 	cd bridge && go test ./...
 
 test-lua:
-	nvim --headless --clean -u test/init.lua -c "lua require('test.run')()" -c "qa!"
+	nvim --headless --clean -u test/init.lua -c 'lua local ok, err = pcall(require("test.run")); if not ok then io.stderr:write(tostring(err), "\n"); vim.cmd("cquit 1") end' -c "qa!"
 
 clean:
 	rm -rf bin

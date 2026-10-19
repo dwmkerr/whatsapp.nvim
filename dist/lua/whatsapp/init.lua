@@ -22,6 +22,12 @@ local defaults = {
   mark_read_on_view = true,
   default_reaction = "👍",
   layout = "bubbles", -- or "lines"
+  images = {
+    mode = "auto", -- "auto" | "tag" | "kitty", see docs/configuration.md
+    max_width = 60, -- cells; pictures fill the bubble up to this
+    max_height = 20, -- rows, also capped at half the pane
+    crop = true, -- centre-crop pictures taller than max_height rather than shrink them
+  },
 }
 
 local function define_highlights()
@@ -336,6 +342,7 @@ function M.open_chat(jid)
   if not jid then
     return
   end
+  S.view = nil
   if S.current ~= jid then
     stop_typing()
   end
@@ -531,6 +538,27 @@ function M.open_media(m)
   end
 end
 
+-- Zoom: the picture takes over the chat pane, like help does, so nothing
+-- is drawn twice. q, <Esc> or <CR> bring the conversation back.
+function M.view_image(m)
+  if not (m and m.path) or not S.win_valid("chat") then
+    return
+  end
+  S.help = false
+  S.view = m
+  vim.api.nvim_set_current_win(S.wins.chat)
+  chat.render()
+end
+
+function M.close_view()
+  local m = S.view
+  S.view = nil
+  chat.render()
+  local images = require("whatsapp.ui.images")
+  images.release_full(m)
+  images.repaint()
+end
+
 -- g? from any pane: the cheatsheet takes over the chat pane and focus
 -- moves there so q closes it; closing returns focus to where you were.
 function M.toggle_help()
@@ -541,6 +569,7 @@ function M.toggle_help()
       vim.api.nvim_set_current_win(S.help_return)
     end
     S.help_return = nil
+    require("whatsapp.ui.images").repaint()
     return
   end
   if not S.win_valid("chat") then
@@ -548,6 +577,7 @@ function M.toggle_help()
   end
   S.help_return = vim.api.nvim_get_current_win()
   S.help = true
+  S.view = nil
   vim.api.nvim_set_current_win(S.wins.chat)
   chat.render()
 end
@@ -581,6 +611,17 @@ function M.media_menu(m)
     return
   end
   local items = {}
+  local images = require("whatsapp.ui.images")
+  -- Zoom first, so <CR><CR> on a picture is the quick look.
+  if m.media_type == "image" and images.mode() == "kitty" then
+    items[#items + 1] = { "View", function()
+      if m.path then
+        M.view_image(m)
+      else
+        fetch_media(m, function() M.view_image(m) end)
+      end
+    end }
+  end
   if not m.cached then
     items[#items + 1] = { "Download", function() fetch_media(m) end }
   end
@@ -742,6 +783,8 @@ end
 function M.close()
   S.help = false
   S.help_return = nil
+  S.view = nil
+  require("whatsapp.ui.images").reset()
   stop_typing()
   set_presence(false)
   if S.layout_valid() then

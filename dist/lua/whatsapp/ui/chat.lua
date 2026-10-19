@@ -1,6 +1,7 @@
 local S = require("whatsapp.state")
 local format = require("whatsapp.format")
 local help = require("whatsapp.ui.help")
+local images = require("whatsapp.ui.images")
 
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_chat")
@@ -11,7 +12,7 @@ local typing_start = nil -- 0-based line where the typing rows begin, nil when h
 -- Rows for the typing indicator in the open chat, nil when there is none.
 local function typing_rows(width)
   local t = S.typing
-  if not t or not S.current or t.jid ~= S.current or S.qr or S.help then
+  if not t or not S.current or t.jid ~= S.current or S.qr or S.help or S.view then
     return nil
   end
   if S.opts.layout == "bubbles" then
@@ -45,7 +46,13 @@ function M.ensure_buf()
   end
   map("R", function() wa.reply_to(M.message_under_cursor()) end, "Reply to message")
   map("r", function() wa.react_to(M.message_under_cursor()) end, "React to message")
-  map("<CR>", function() wa.media_menu(M.media_target()) end, "Media menu")
+  map("<CR>", function()
+    if S.view then
+      wa.close_view()
+    else
+      wa.media_menu(M.media_target())
+    end
+  end, "Media menu, or close the picture")
   map("gx", function() wa.open_media(M.media_target()) end, "Open media")
   map("]m", function() wa.next_media(1) end, "Next media")
   map("[m", function() wa.next_media(-1) end, "Previous media")
@@ -58,15 +65,19 @@ function M.ensure_buf()
   map("q", function()
     if S.help then
       wa.toggle_help()
+    elseif S.view then
+      wa.close_view()
     else
       wa.close()
     end
-  end, "Close help, or WhatsApp")
+  end, "Close help or picture, or WhatsApp")
   map("<Esc>", function()
     if S.help then
       wa.toggle_help()
+    elseif S.view then
+      wa.close_view()
     end
-  end, "Close help")
+  end, "Close help or picture")
   map("g?", wa.toggle_help, "All keys")
   map("L", M.toggle_layout, "Toggle bubble/line layout")
   vim.api.nvim_create_autocmd("CursorMoved", { buffer = buf, callback = M.update_hint })
@@ -290,11 +301,20 @@ function M.render()
   local chat = S.current and S.chat_by_jid[S.current]
   local width = S.text_width("chat", 80)
   local height = S.win_valid("chat") and vim.api.nvim_win_get_height(S.wins.chat) or 20
+  -- Same box rule as format.bubbles, so a picture is fitted to the widest
+  -- bubble the pane allows.
+  local bubble_inner_max = math.max(24, math.floor(width * 0.7)) - 4
+  -- A picture never takes more than half the pane, whatever the option.
+  local image_rows = math.max(1, math.floor(height / 2))
   local lines, owners, spans
   -- A pending QR code takes the pane over even with a chat open: you can
   -- only be pairing because there is no session to read from anyway.
   if S.help then
     lines, spans = help.layout(width, height)
+    owners = {}
+  elseif S.view then
+    images.clear(buf)
+    lines, spans = images.full_layout(S.view, width, height)
     owners = {}
   elseif not S.current or S.qr then
     lines, spans = splash(width, height)
@@ -304,7 +324,9 @@ function M.render()
       vim.wo[S.wins.chat].wrap = S.qr == nil
     end
   elseif S.opts.layout == "bubbles" then
-    lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width)
+    lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width, function(m)
+      return images.size(m, bubble_inner_max, image_rows)
+    end)
   else
     lines, owners, spans = format.conversation(msgs, chat and chat.is_group)
   end
@@ -356,7 +378,7 @@ function M.render()
   end
   -- Help and the QR code park the cursor at the top; forget the chat so the
   -- next conversation render follows the bottom again.
-  if S.help or S.qr then
+  if S.help or S.qr or S.view then
     rendered_jid = nil
   else
     rendered_jid = S.current
@@ -366,6 +388,23 @@ function M.render()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  -- Pictures: inside the bubble above its footer, or under the message at
+  -- the tag's indent in the lines layout. Either way above the hint.
+  images.clear(buf)
+  for _, e in ipairs(media_rows) do
+    if e.m.media_type == "image" then
+      if S.opts.layout == "bubbles" then
+        local footer = lines[e.last] or ""
+        local indent = footer:match("^%s*")
+        local inner = vim.fn.strdisplaywidth(footer) - #indent - 4
+        images.place(buf, e.last, indent, e.m, bubble_inner_max, image_rows,
+          { inner = inner, hl = e.m.from_me and "WhatsAppBubbleMe" or "WhatsAppBubble" })
+      else
+        local indent = (lines[e.row] or ""):match("^%s*") .. "  "
+        images.place(buf, e.last, indent, e.m, width - #indent - 1, image_rows)
+      end
+    end
+  end
   for _, s in ipairs(spans) do
     local line, cs, ce, group = s[1], s[2], s[3], s[4]
     if ce == -1 then
@@ -376,15 +415,17 @@ function M.render()
   end
 
   if S.win_valid("chat") then
-    local name = S.help and "WhatsApp keys" or (S.current and S.chat_title(S.current) or "WhatsApp")
+    local name = S.help and "WhatsApp keys"
+      or (S.view and ((S.view.filename ~= "" and S.view.filename or "image") .. " · q closes"))
+      or (S.current and S.chat_title(S.current) or "WhatsApp")
     vim.wo[S.wins.chat].winbar = " " .. S.bar_text(name)
     -- The chat window is often not the current one (the list or compose
     -- pane has focus), and Neovim leaves a non-current window's topline
     -- alone when its buffer changes. Scroll explicitly inside the window so
     -- the view matches the cursor.
     vim.api.nvim_win_call(S.wins.chat, function()
-      if S.help or not S.current or S.qr then
-        -- Help, splash and QR code read from the top.
+      if S.help or S.view or not S.current or S.qr then
+        -- Help, picture, splash and QR code read from the top.
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         vim.cmd("normal! zt")
       elseif follow then
@@ -394,6 +435,7 @@ function M.render()
     end)
   end
   M.update_hint()
+  images.commit()
 end
 
 -- Update the typing indicator. Appearing or disappearing re-renders the

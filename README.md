@@ -66,13 +66,19 @@ Please be careful. If someone has sent something malicious then in the worst cas
 
 **Images**
 
-Images are not shown inline yet; `gx` opens them in your image viewer. Inline rendering for terminals that support the Kitty graphics protocol is tracked in [#8](https://github.com/dwmkerr/whatsapp.nvim/issues/8).
+In a terminal that speaks the Kitty graphics protocol, such as Ghostty or kitty, pictures show inside their bubble. `<CR>` then `View` zooms one to fill the pane, `q` brings the chat back. Elsewhere you get the tag line and `gx` opens the file. The default detects which you have; see [Configuration](./docs/configuration.md#images) for the `images` options.
+
+![Picture inside its bubble in Ghostty](./docs/images.png)
 
 **Other Bits & Pieces**
 
 - When new messages come in for a chat you are not viewing, a notification is shown via `vim.notify` (the command line by default, or whatever your notification plugin does). `notify = false` in `setup()` silences it.
 - The "…is typing" bubble appears under the last message while you have that chat open and the terminal focused, like the phone. In that state contacts see you as online, which is what makes WhatsApp send the typing events.
 - Each chat keeps its own unsent draft and reply target until Neovim exits.
+
+## Config
+
+There are various options available to customise WhatsApp, controlling how images are rendered, keyboard shortcuts, and more. Check the [Configuration](./docs/configuration.md) documentation for details.
 
 ## Contributing
 

@@ -32,7 +32,19 @@ return function()
   check(clines[1]:match("^── ") ~= nil, "conversation starts with a day separator")
   check(clines[2]:match("Alice: hi$") ~= nil and clines[3]:match("there$") ~= nil, "multi-line text continues indented")
   check(owners[3] and owners[3].id == "1", "continuation line maps to its message")
-  check(clines[4]:find("[image image.jpg ⇣]", 1, true) ~= nil, "media renders as a tag")
+  check(clines[4]:find("[image ⇣]", 1, true) ~= nil, "media renders as a tag, generic image.jpg name dropped: " .. clines[4])
+  local nlines = format.conversation({
+    { id = "5", text = "", ts = 1760390060, from_me = true, sender_name = "me", media_type = "image", filename = "holiday.jpg" },
+  }, false)
+  check(nlines[2]:find("[image holiday.jpg ⇣]", 1, true) ~= nil, "a real filename stays in the tag")
+  local wide = format.bubbles({
+    { id = "6", text = "", ts = 1760390060, from_me = false, sender_name = "Alice", sender = "x", media_type = "image", filename = "image.jpg" },
+  }, false, 80, function() return 30 end)
+  local head_line
+  for _, l in ipairs(wide) do
+    if l:find("╭", 1, true) then head_line = l end
+  end
+  check(head_line and vim.fn.strdisplaywidth(head_line) == 34, "bubble widens to frame a picture: " .. tostring(head_line))
   check(#spans > 0, "spans emitted")
 
   check(format.waveform({ 0, 100, 50, 0 }, 4) == "▁█▄▁", "waveform maps levels to blocks")
@@ -196,7 +208,115 @@ return function()
     "chat has buffer-local <CR> and gx")
   local tag_line = vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false)
   check(table.concat(tag_line, "\n"):find("[voice 0:03 ⇣]", 1, true) ~= nil, "undownloaded media shows ⇣")
-  check(table.concat(tag_line, "\n"):find("[image image.jpg ✓]", 1, true) ~= nil, "cached media shows ✓")
+  check(table.concat(tag_line, "\n"):find("[image ✓]", 1, true) ~= nil, "cached media shows ✓")
+
+  -- Inline images: pure helpers first, then the kitty pipeline end to end
+  -- against a two-pixel BMP, then tag mode leaves nothing behind.
+  local images = require("whatsapp.ui.images")
+  local img_ns = vim.api.nvim_create_namespace("whatsapp_images")
+  local cols, rows = images.fit(800, 600, 60, 12, 9, 18)
+  check(cols == 32 and rows == 12, "fit keeps the aspect inside the box: " .. cols .. "x" .. rows)
+  check(select(1, images.fit(600, 800, 60, 12, 9, 18)) == 18, "fit narrows a tall image to the row limit")
+  local fc, fr, crop = images.fit_fill(800, 600, 60, 20, 9, 18)
+  check(fc == 60 and fr == 20 and crop and crop.h == 533 and crop.y == 33 and crop.w == 800, "fit_fill fills the width and centre-crops the overflow: " .. vim.inspect({ fc, fr, crop }))
+  fc, fr, crop = images.fit_fill(600, 800, 60, 20, 9, 18)
+  check(fc == 60 and fr == 20 and crop.h == 400 and crop.y == 200, "fit_fill crops a portrait to the row cap")
+  fc, fr, crop = images.fit_fill(800, 100, 60, 20, 9, 18)
+  check(fc == 60 and fr == 4 and crop == nil, "fit_fill leaves a wide image uncropped")
+  fc, fr, crop = images.fit_fill(100, 50, 60, 20, 9, 18)
+  check(fc == 12 and fr == 3 and crop == nil, "fit_fill does not blow up a small image")
+  local png = "\137PNG\r\n\26\n" .. "\0\0\0\13IHDR" .. "\0\0\3\32" .. "\0\0\2\88"
+  local pw, ph = images.png_size(png)
+  check(pw == 800 and ph == 600, "png_size reads IHDR")
+  check(images.png_size("not a png") == nil, "png_size rejects other data")
+  local function bmp(w, h, pixels)
+    local stride = math.ceil(w * 3 / 4) * 4
+    local function u32(n) return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256) end
+    local body = {}
+    for y = h - 1, 0, -1 do
+      local row = {}
+      for x = 0, w - 1 do
+        local r, g, b = unpack(pixels[y * w + x + 1])
+        row[#row + 1] = string.char(b, g, r)
+      end
+      body[#body + 1] = table.concat(row) .. string.rep("\0", stride - w * 3)
+    end
+    local data = table.concat(body)
+    return "BM" .. u32(54 + #data) .. u32(0) .. u32(54) .. u32(40) .. u32(w) .. u32(h) .. string.char(1, 0, 24, 0) .. string.rep("\0", 24) .. data
+  end
+  local pl = images.placeholder_lines(7, 3, 2, "  ")
+  check(#pl == 2 and pl[1][2][2] == "WhatsAppImage7" and vim.fn.strchars(pl[1][2][1]) == 9, "placeholder_lines builds a cells x rows grid")
+  check(vim.fn.hlexists("WhatsAppImage7") == 1, "placeholder highlight carries the image id")
+  check(images.kitty_cmd({ a = "T", i = 5 }, "x") == "\27_Ga=T,i=5;x\27\\", "kitty_cmd formats an APC command")
+  check(images.wrap_tmux("\27_Ga=T\27\\") == "\27Ptmux;\27\27_Ga=T\27\27\\\27\\", "wrap_tmux doubles inner escapes")
+  check(images.terminal_supports_kitty({ TERM_PROGRAM = "ghostty" }) and images.terminal_supports_kitty({ KITTY_WINDOW_ID = "1" })
+    and not images.terminal_supports_kitty({ TERM_PROGRAM = "iTerm.app", TERM = "xterm-256color" }), "terminal detection reads the environment")
+  check(images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "ghostty 1.3.1 xterm-256color")
+    and images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, " xterm-kitty")
+    and not images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "iTerm2 3.6.11 xterm-256color"),
+    "inside tmux the outer client's reported terminal decides")
+
+  local function image_marks()
+    return vim.api.nvim_buf_get_extmarks(S.bufs.chat, img_ns, 0, -1, { details = true })
+  end
+  images._set_mode("tag")
+  chat.render()
+  check(#image_marks() == 0, "tag mode hangs nothing under the tag")
+  local has_converter = vim.fn.executable("magick") == 1 or vim.fn.executable("convert") == 1 or vim.fn.executable("sips") == 1
+  if has_converter then
+    local fixture = vim.fn.tempname() .. ".bmp"
+    local f = assert(io.open(fixture, "wb"))
+    f:write(bmp(2, 2, { { 0, 0, 0 }, { 255, 255, 255 }, { 128, 128, 128 }, { 255, 0, 0 } }))
+    f:close()
+    msgs[#msgs].path = fixture
+    images._set_mode("kitty")
+    chat.render()
+    check(wait_for(function()
+      local ms = image_marks()
+      return ms[1] and ms[1][4].virt_lines[1][2][2]:match("^WhatsAppImage%d+$") ~= nil
+    end, 5000), "kitty mode converts to PNG and hangs a placeholder grid")
+    local marks = image_marks()
+    local kvl = marks[1][4].virt_lines
+    check(#kvl >= 1 and #kvl <= 20 and vim.fn.strchars(kvl[1][2][1]) % 3 == 0, "placeholder rows are cell triplets")
+    check(marks[1][2] + 1 == vim.api.nvim_buf_line_count(S.bufs.chat) and not marks[1][4].virt_lines_above, "lines layout hangs the rows under the message")
+    S.opts.layout = "bubbles"
+    chat.render()
+    check(wait_for(function()
+      local ms = image_marks()
+      return ms[1] and ms[1][4].virt_lines_above == true
+    end, 5000), "bubbles layout puts the rows above the footer")
+    local bvl = image_marks()[1][4].virt_lines[1]
+    local footer = vim.api.nvim_buf_get_lines(S.bufs.chat, image_marks()[1][2], image_marks()[1][2] + 1, false)[1]
+    check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
+    check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
+    S.opts.layout = "lines"
+    -- Reopening a chat rebuilds its message objects without the path; the
+    -- picture must survive that.
+    local old_m = msgs[#msgs]
+    msgs[#msgs] = { id = old_m.id, chat_jid = old_m.chat_jid, sender = old_m.sender, sender_name = old_m.sender_name,
+      text = "", ts = old_m.ts, from_me = false, media_type = "image", filename = "image.jpg", cached = true }
+    chat.render()
+    check(wait_for(function() return #image_marks() > 0 end, 5000) and msgs[#msgs].path == fixture, "a rebuilt message without a path still shows its picture")
+    -- View: the picture takes over the chat pane, q brings the chat back.
+    vim.api.nvim_set_current_win(S.wins.list)
+    wa.view_image(msgs[#msgs])
+    check(S.view == msgs[#msgs] and vim.api.nvim_get_current_win() == S.wins.chat, "view takes the chat pane and focus")
+    local placeholder = vim.fn.nr2char(0x10EEEE)
+    check(wait_for(function()
+      return table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find(placeholder, 1, true) ~= nil
+    end, 5000), "view fills the pane with the placeholder grid")
+    check(vim.wo[S.wins.chat].winbar:find("q closes", 1, true) ~= nil, "view names its exit in the title")
+    check(#image_marks() == 0, "no inline picture while viewing")
+    vim.api.nvim_feedkeys("q", "x", false)
+    check(S.view == nil and table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find("hello", 1, true) ~= nil, "q restores the conversation")
+    msgs[#msgs].path = nil
+    images._set_mode("tag")
+    chat.render()
+    check(#image_marks() == 0, "back to tag mode clears the rows")
+    check(images.full(msgs[#msgs], 40, 20) == nil, "full is a no-op in tag mode")
+  else
+    io.stderr:write("skip: no image converter on this machine\n")
+  end
   for _ = 1, 3 do table.remove(msgs) end
   chat.render()
 
