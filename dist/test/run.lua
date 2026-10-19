@@ -198,7 +198,7 @@ return function()
   check(table.concat(tag_line, "\n"):find("[voice 0:03 ⇣]", 1, true) ~= nil, "undownloaded media shows ⇣")
   check(table.concat(tag_line, "\n"):find("[image image.jpg ✓]", 1, true) ~= nil, "cached media shows ✓")
 
-  -- Inline images: pure helpers first, then the ascii pipeline end to end
+  -- Inline images: pure helpers first, then the kitty pipeline end to end
   -- against a two-pixel BMP, then tag mode leaves nothing behind.
   local images = require("whatsapp.ui.images")
   local img_ns = vim.api.nvim_create_namespace("whatsapp_images")
@@ -209,10 +209,6 @@ return function()
   local pw, ph = images.png_size(png)
   check(pw == 800 and ph == 600, "png_size reads IHDR")
   check(images.png_size("not a png") == nil, "png_size rejects other data")
-  local ppm = "P6\n# comment\n2 2\n255\n" .. string.char(0, 0, 0, 255, 255, 255, 128, 128, 128, 255, 0, 0)
-  local pix = images.parse_ppm(ppm)
-  check(pix and pix.w == 2 and select(1, pix.at(1, 0)) == 255 and select(1, pix.at(0, 1)) == 128, "parse_ppm skips comments and indexes pixels")
-  check(table.concat(images.ascii_rows(pix, 2, 1)) == "+:", "ascii_rows maps luminance to the ramp")
   local function bmp(w, h, pixels)
     local stride = math.ceil(w * 3 / 4) * 4
     local function u32(n) return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256) end
@@ -228,8 +224,6 @@ return function()
     local data = table.concat(body)
     return "BM" .. u32(54 + #data) .. u32(0) .. u32(54) .. u32(40) .. u32(w) .. u32(h) .. string.char(1, 0, 24, 0) .. string.rep("\0", 24) .. data
   end
-  local bpix = images.parse_bmp(bmp(2, 2, { { 0, 0, 0 }, { 255, 255, 255 }, { 128, 128, 128 }, { 255, 0, 0 } }))
-  check(bpix and bpix.w == 2 and select(1, bpix.at(1, 0)) == 255 and select(1, bpix.at(0, 1)) == 128, "parse_bmp handles bottom-up rows and BGR")
   local pl = images.placeholder_lines(7, 3, 2, "  ")
   check(#pl == 2 and pl[1][2][2] == "WhatsAppImage7" and vim.fn.strchars(pl[1][2][1]) == 9, "placeholder_lines builds a cells x rows grid")
   check(vim.fn.hlexists("WhatsAppImage7") == 1, "placeholder highlight carries the image id")
@@ -251,21 +245,16 @@ return function()
     f:write(bmp(2, 2, { { 0, 0, 0 }, { 255, 255, 255 }, { 128, 128, 128 }, { 255, 0, 0 } }))
     f:close()
     msgs[#msgs].path = fixture
-    images._set_mode("ascii")
-    chat.render()
-    check(wait_for(function() return #image_marks() > 0 end, 5000), "ascii mode converts the file and hangs rows under the message")
-    local marks = image_marks()
-    local vl = marks[1] and marks[1][4].virt_lines
-    check(vl and #vl >= 1 and #vl <= 12 and vl[1][2][2] == "Comment", "ascii rows are virtual lines in Comment")
-    check(marks[1] and marks[1][2] + 1 == vim.api.nvim_buf_line_count(S.bufs.chat), "ascii rows hang under the last line of the message")
     images._set_mode("kitty")
     chat.render()
     check(wait_for(function()
       local ms = image_marks()
       return ms[1] and ms[1][4].virt_lines[1][2][2]:match("^WhatsAppImage%d+$") ~= nil
     end, 5000), "kitty mode converts to PNG and hangs a placeholder grid")
-    local kvl = image_marks()[1][4].virt_lines
+    local marks = image_marks()
+    local kvl = marks[1][4].virt_lines
     check(#kvl >= 1 and #kvl <= 12 and vim.fn.strchars(kvl[1][2][1]) % 3 == 0, "placeholder rows are cell triplets")
+    check(marks[1][2] + 1 == vim.api.nvim_buf_line_count(S.bufs.chat), "placeholder rows hang under the last line of the message")
     msgs[#msgs].path = nil
     images._set_mode("tag")
     chat.render()

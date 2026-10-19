@@ -66,7 +66,7 @@ Please be careful. If someone has sent something malicious then in the worst cas
 
 **Images**
 
-Pictures can hang under their tag in one of three modes: `tag` (just the tag line, `gx` opens the file), `ascii` (a small character rendering, needs ImageMagick or macOS `sips`) and `kitty` (the real picture, needs a terminal that speaks the Kitty graphics protocol such as Ghostty or kitty). The default picks the best your setup supports. See [Configuration](./docs/configuration.md#images) for the details and what each mode needs.
+Pictures hang under their tag in terminals that speak the Kitty graphics protocol, such as Ghostty or kitty; elsewhere you get the tag line and `gx` opens the file. The default detects which you have. See [Configuration](./docs/configuration.md#images) for the `images` options and what the picture mode needs.
 
 **Other Bits & Pieces**
 

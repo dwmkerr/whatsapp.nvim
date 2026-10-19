@@ -14,7 +14,7 @@ require("whatsapp").setup({
   default_reaction = "👍",                       -- what r sends when you accept the default
   layout = "bubbles",                            -- "bubbles" or "lines", L toggles at runtime
   images = {
-    mode = "auto",                               -- "auto", "tag", "ascii" or "kitty"
+    mode = "auto",                               -- "auto", "tag" or "kitty"
     max_width = 60,                              -- cells
     max_height = 12,                             -- rows
   },
@@ -28,10 +28,9 @@ An image message always has a tag line, `[image photo.jpg ✓]`, which is what `
 | Mode | What you see | Needs |
 |---|---|---|
 | `tag` | the tag line only | nothing |
-| `ascii` | a small grayscale character rendering, best effort | ImageMagick (`magick` or `convert`) or macOS `sips` |
-| `kitty` | the picture itself | a terminal that speaks the Kitty graphics protocol (Ghostty, kitty, WezTerm, Konsole) and a converter as above |
+| `kitty` | the picture itself | a terminal that speaks the Kitty graphics protocol (Ghostty, kitty, WezTerm, Konsole), and ImageMagick (`magick` or `convert`) or macOS `sips` to turn JPEG into PNG |
 
-`auto`, the default, picks the best of those the environment supports, in the order kitty, ascii, tag. Pin a mode to force it; a pinned mode whose requirements are missing falls back to `tag` with a warning.
+`auto`, the default, is `kitty` when the environment supports it and `tag` otherwise. Pin `kitty` to force it; if its requirements are missing it falls back to `tag` with a warning.
 
 Only files already on disk are drawn: pictures you have downloaded, or that arrived earlier and are in the cache. Nothing is fetched from the network to render a chat.
 
@@ -44,7 +43,7 @@ The Kitty protocol has to reach the terminal through tmux. tmux forwards it when
 ### Known limits
 
 - Pictures are rendered after a conversion step, so the first view of each one takes a moment.
-- The picture is sent to the terminal by file path. Over `ssh` the terminal cannot read the file, so use `ascii` or `tag` there.
+- The picture is sent to the terminal by file path. Over `ssh` the terminal cannot read the file, so you get the tag there.
 - Stickers, video previews and thumbnails of images not yet downloaded are not drawn yet.
 
 ## Highlight groups

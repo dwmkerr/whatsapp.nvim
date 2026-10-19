@@ -23,7 +23,7 @@ local defaults = {
   default_reaction = "👍",
   layout = "bubbles", -- or "lines"
   images = {
-    mode = "auto", -- "auto" | "tag" | "ascii" | "kitty", see docs/configuration.md
+    mode = "auto", -- "auto" | "tag" | "kitty", see docs/configuration.md
     max_width = 60, -- cells
     max_height = 12, -- rows
   },

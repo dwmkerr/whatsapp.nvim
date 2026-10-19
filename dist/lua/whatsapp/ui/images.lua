@@ -1,8 +1,7 @@
--- Pictures under image tags. Three modes, picked once per session:
+-- Pictures under image tags. Two modes, picked once per session:
 --   tag    the [image photo.jpg ✓] line only, what every terminal gets
---   ascii  a small character rendering, needs a converter (magick or sips)
 --   kitty  the real picture through the Kitty graphics protocol, needs a
---          terminal that speaks it plus the converter for JPEG to PNG
+--          terminal that speaks it plus magick or sips for JPEG to PNG
 -- The tag line stays in every mode because <CR>, gx and ]m act on it; the
 -- picture hangs under it as virtual lines, so buffer rows never move.
 local S = require("whatsapp.state")
@@ -23,12 +22,9 @@ for i, hex in ipairs(diacritics) do
   positions[i] = vim.fn.nr2char(tonumber(hex, 16))
 end
 
--- Darkest to lightest, so dark terminals read the ramp as a positive.
-local RAMP = " .:-=+*#%@"
-
 local resolved -- mode in use, nil until the first image asks
-local converter -- { name, png = fn(src, dst), small = fn(src, dst) }
-local cache = {} -- source path -> { state, cols, rows, png, id, rows_text }
+local converter -- { name, png = fn(src, dst) }
+local cache = {} -- source path -> { state, cols, rows, png, id }
 local sent = {} -- kitty id -> true once the terminal holds the image
 local passthrough_set = false
 local asked = {} -- message id -> true once its cached path was requested
@@ -64,87 +60,6 @@ function M.png_size(bytes)
     return ((a * 256 + b) * 256 + c) * 256 + d
   end
   return u32(17), u32(21)
-end
-
--- Binary PPM (P6) into { w, h, at = fn(x, y) -> r, g, b }, 0-based x y.
-function M.parse_ppm(bytes)
-  local pos = 1
-  local function token()
-    while true do
-      local s, e = bytes:find("^%s*#[^\n]*\n", pos)
-      if s then pos = e + 1 else break end
-    end
-    local s, e, t = bytes:find("^%s*(%S+)", pos)
-    if not s then return nil end
-    pos = e + 1
-    return t
-  end
-  if token() ~= "P6" then
-    return nil
-  end
-  local w, h, maxv = tonumber(token()), tonumber(token()), tonumber(token())
-  if not (w and h and maxv) then
-    return nil
-  end
-  pos = pos + 1 -- single whitespace after maxval
-  return {
-    w = w, h = h,
-    at = function(x, y)
-      local i = pos + (y * w + x) * 3
-      return bytes:byte(i, i + 2)
-    end,
-  }
-end
-
--- 24- or 32-bit uncompressed BMP, which is what sips writes. Rows are
--- bottom-up and padded to four bytes; pixels are stored BGR.
-function M.parse_bmp(bytes)
-  if bytes:sub(1, 2) ~= "BM" or #bytes < 54 then
-    return nil
-  end
-  local function u32(at)
-    local a, b, c, d = bytes:byte(at, at + 3)
-    return ((d * 256 + c) * 256 + b) * 256 + a
-  end
-  local offset = u32(11)
-  local w, h = u32(19), u32(23)
-  local topdown = h >= 2 ^ 31
-  if topdown then h = 2 ^ 32 - h end
-  local bpp = bytes:byte(29) + bytes:byte(30) * 256
-  if bpp ~= 24 and bpp ~= 32 then
-    return nil
-  end
-  local bytes_pp = bpp / 8
-  local stride = math.ceil(w * bytes_pp / 4) * 4
-  return {
-    w = w, h = h,
-    at = function(x, y)
-      local row = topdown and y or (h - 1 - y)
-      local i = offset + 1 + row * stride + x * bytes_pp
-      local b, g, r = bytes:byte(i, i + 2)
-      return r, g, b
-    end,
-  }
-end
-
--- Character rows for a pixel map, nearest sampling, cells counted as twice
--- as tall as wide so the picture keeps its shape.
-function M.ascii_rows(pix, max_cols, max_rows)
-  local cols, rows = M.fit(pix.w, pix.h, max_cols, max_rows, 1, 2)
-  local out = {}
-  for r = 0, rows - 1 do
-    local line = {}
-    local y = math.min(pix.h - 1, math.floor((r + 0.5) * pix.h / rows))
-    for c = 0, cols - 1 do
-      local x = math.min(pix.w - 1, math.floor((c + 0.5) * pix.w / cols))
-      local red, green, blue = pix.at(x, y)
-      local lum = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
-      local idx = math.min(#RAMP, math.floor(lum * #RAMP) + 1)
-      line[#line + 1] = RAMP:sub(idx, idx)
-    end
-    out[r + 1] = table.concat(line)
-  end
-  return out
 end
 
 -- Placeholder grid as virt_lines rows, each prefixed with the indent.
@@ -197,18 +112,12 @@ local function find_converter()
     return {
       name = bin,
       png = function(src, dst) return { bin, src, "png:" .. dst } end,
-      small = function(src, dst) return { bin, src, "-resize", "200x200>", "ppm:" .. dst } end,
-      parse = M.parse_ppm,
     }
   end
   if vim.fn.executable("sips") == 1 then
     return {
       name = "sips",
       png = function(src, dst) return { "sips", "-s", "format", "png", src, "--out", dst } end,
-      small = function(src, dst)
-        return { "sips", "--resampleHeightWidthMax", "200", "-s", "format", "bmp", src, "--out", dst }
-      end,
-      parse = M.parse_bmp,
     }
   end
   return nil
@@ -245,19 +154,10 @@ function M.mode()
   elseif want == "kitty" or want == "auto" then
     if kitty and converter then
       resolved = "kitty"
-    elseif want == "kitty" then
-      vim.notify("WhatsApp: images.mode kitty needs a Kitty-protocol terminal and magick or sips; showing tags", vim.log.levels.WARN)
-      resolved = "tag"
-    elseif converter then
-      resolved = "ascii"
     else
-      resolved = "tag"
-    end
-  elseif want == "ascii" then
-    if converter then
-      resolved = "ascii"
-    else
-      vim.notify("WhatsApp: images.mode ascii needs magick or sips; showing tags", vim.log.levels.WARN)
+      if want == "kitty" then
+        vim.notify("WhatsApp: images.mode kitty needs a Kitty-protocol terminal and magick or sips; showing tags", vim.log.levels.WARN)
+      end
       resolved = "tag"
     end
   else
@@ -315,45 +215,31 @@ end
 
 -- Start preparing an image; re-render the chat when it is ready.
 local function prepare(src, jid)
-  local mode = M.mode()
   local entry = { state = "pending" }
-  -- Keyed by mode too: a switch between ascii and kitty must not reuse
-  -- an entry shaped for the other.
-  cache[mode .. ":" .. src] = entry
+  cache[src] = entry
   local max_cols, max_rows = S.opts.images.max_width, S.opts.images.max_height
   local dst, cmd
-  if mode == "kitty" then
-    dst = cache_dir() .. "/" .. vim.fn.sha256(src):sub(1, 16) .. ".png"
-    cmd = src:lower():match("%.png$") and nil or converter.png(src, dst)
-    if not cmd then dst = src end
+  if src:lower():match("%.png$") then
+    dst = src
   else
-    dst = cache_dir() .. "/" .. vim.fn.sha256(src):sub(1, 16) .. (converter.name == "sips" and ".bmp" or ".ppm")
-    cmd = converter.small(src, dst)
+    dst = cache_dir() .. "/" .. vim.fn.sha256(src):sub(1, 16) .. ".png"
+    cmd = converter.png(src, dst)
   end
   local function finish()
     local data = read_file(dst)
-    if mode == "kitty" then
-      local w, h
-      if data then
-        w, h = M.png_size(data)
-      end
-      if not w then
-        entry.state = "failed"
-        return
-      end
-      local cw, ch = cell_size()
-      entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
-      entry.png = dst
-      next_id = next_id + 1
-      entry.id = next_id
-    else
-      local pix = data and converter.parse(data)
-      if not pix then
-        entry.state = "failed"
-        return
-      end
-      entry.rows_text = M.ascii_rows(pix, max_cols, max_rows)
+    local w, h
+    if data then
+      w, h = M.png_size(data)
     end
+    if not w then
+      entry.state = "failed"
+      return
+    end
+    local cw, ch = cell_size()
+    entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
+    entry.png = dst
+    next_id = next_id + 1
+    entry.id = next_id
     entry.state = "ready"
     if S.current == jid then
       require("whatsapp.ui.chat").render()
@@ -403,7 +289,7 @@ function M.place(buf, anchor, indent, m)
     end
     return
   end
-  local entry = cache[resolved .. ":" .. m.path]
+  local entry = cache[m.path]
   if not entry then
     prepare(m.path, m.chat_jid)
     return
@@ -411,17 +297,10 @@ function M.place(buf, anchor, indent, m)
   if entry.state ~= "ready" then
     return
   end
-  local lines
-  if resolved == "kitty" then
-    transmit(entry)
-    lines = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent)
-  else
-    lines = {}
-    for _, r in ipairs(entry.rows_text) do
-      lines[#lines + 1] = { { indent, "Comment" }, { r, "Comment" } }
-    end
-  end
-  vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = lines })
+  transmit(entry)
+  vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, {
+    virt_lines = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent),
+  })
 end
 
 -- Forget transmitted images so a new session starts clean; the terminal
