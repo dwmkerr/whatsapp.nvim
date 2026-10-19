@@ -97,13 +97,25 @@ end
 
 -- Environment ---------------------------------------------------------------
 
-function M.terminal_supports_kitty(env)
+-- Inside tmux the environment describes tmux, not the terminal it sits
+-- in, so ask tmux what the client's TERM is instead.
+local function outer_term(env)
+  if not env.TMUX then
+    return env.TERM
+  end
+  local ok, out = pcall(vim.fn.system, { "tmux", "display", "-p", "#{client_termname}" })
+  return ok and vim.trim(out) or env.TERM
+end
+
+function M.terminal_supports_kitty(env, term)
   env = env or vim.fn.environ()
+  term = term or outer_term(env)
   return env.TERM_PROGRAM == "ghostty"
     or env.GHOSTTY_RESOURCES_DIR ~= nil
     or env.KITTY_WINDOW_ID ~= nil
-    or env.TERM == "xterm-kitty"
     or env.WEZTERM_EXECUTABLE ~= nil
+    or term == "xterm-kitty"
+    or term == "xterm-ghostty"
 end
 
 local function find_converter()
@@ -151,15 +163,17 @@ function M.mode()
   local kitty = M.terminal_supports_kitty() and #vim.api.nvim_list_uis() > 0
   if want == "tag" then
     resolved = "tag"
-  elseif want == "kitty" or want == "auto" then
-    if kitty and converter then
+  elseif want == "kitty" then
+    -- Pinned means the user knows the terminal; only the converter is a
+    -- hard requirement.
+    if converter then
       resolved = "kitty"
     else
-      if want == "kitty" then
-        vim.notify("WhatsApp: images.mode kitty needs a Kitty-protocol terminal and magick or sips; showing tags", vim.log.levels.WARN)
-      end
+      vim.notify("WhatsApp: images.mode kitty needs magick or sips to convert images; showing tags", vim.log.levels.WARN)
       resolved = "tag"
     end
+  elseif want == "auto" then
+    resolved = (kitty and converter) and "kitty" or "tag"
   else
     vim.notify("WhatsApp: unknown images.mode " .. tostring(want) .. "; showing tags", vim.log.levels.WARN)
     resolved = "tag"
