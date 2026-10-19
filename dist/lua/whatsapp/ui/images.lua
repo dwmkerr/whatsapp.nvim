@@ -98,24 +98,26 @@ end
 -- Environment ---------------------------------------------------------------
 
 -- Inside tmux the environment describes tmux, not the terminal it sits
--- in, so ask tmux what the client's TERM is instead.
+-- in. tmux has already asked that terminal its name (XTVERSION), which
+-- survives shells that force TERM=xterm-256color; fall back to TERM.
 local function outer_term(env)
   if not env.TMUX then
-    return env.TERM
+    return env.TERM or ""
   end
-  local ok, out = pcall(vim.fn.system, { "tmux", "display", "-p", "#{client_termname}" })
-  return ok and vim.trim(out) or env.TERM
+  local ok, out = pcall(vim.fn.system, { "tmux", "display", "-p", "#{client_termtype} #{client_termname}" })
+  return ok and vim.trim(out) or (env.TERM or "")
 end
 
 function M.terminal_supports_kitty(env, term)
   env = env or vim.fn.environ()
-  term = term or outer_term(env)
+  term = (term or outer_term(env)):lower()
   return env.TERM_PROGRAM == "ghostty"
     or env.GHOSTTY_RESOURCES_DIR ~= nil
     or env.KITTY_WINDOW_ID ~= nil
     or env.WEZTERM_EXECUTABLE ~= nil
-    or term == "xterm-kitty"
-    or term == "xterm-ghostty"
+    or term:find("ghostty", 1, true) ~= nil
+    or term:find("kitty", 1, true) ~= nil
+    or term:find("wezterm", 1, true) ~= nil
 end
 
 local function find_converter()

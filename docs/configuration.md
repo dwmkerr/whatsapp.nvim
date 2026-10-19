@@ -30,7 +30,7 @@ An image message always has a tag line, `[image photo.jpg ✓]`, which is what `
 | `tag` | the tag line only | nothing |
 | `kitty` | the picture itself | a terminal that speaks the Kitty graphics protocol (Ghostty, kitty, WezTerm, Konsole), and ImageMagick (`magick` or `convert`) or macOS `sips` to turn JPEG into PNG |
 
-`auto`, the default, is `kitty` when the terminal is detected (by `TERM_PROGRAM`, `KITTY_WINDOW_ID`, `TERM` or, inside tmux, the outer client's `TERM`) and a converter is installed, `tag` otherwise. Pin `kitty` to skip detection, for instance under a multiplexer that hides the terminal; it still needs the converter.
+`auto`, the default, is `kitty` when the terminal is detected (by `TERM_PROGRAM`, `KITTY_WINDOW_ID`, `TERM` or, inside tmux, the terminal name tmux learned from the outer client, which works even when a shell forces `TERM=xterm-256color`) and a converter is installed, `tag` otherwise. Pin `kitty` to skip detection, for instance under a multiplexer that hides the terminal; it still needs the converter.
 
 Only files already on disk are drawn: pictures you have downloaded, or that arrived earlier and are in the cache. Nothing is fetched from the network to render a chat.
 

@@ -231,9 +231,10 @@ return function()
   check(images.wrap_tmux("\27_Ga=T\27\\") == "\27Ptmux;\27\27_Ga=T\27\27\\\27\\", "wrap_tmux doubles inner escapes")
   check(images.terminal_supports_kitty({ TERM_PROGRAM = "ghostty" }) and images.terminal_supports_kitty({ KITTY_WINDOW_ID = "1" })
     and not images.terminal_supports_kitty({ TERM_PROGRAM = "iTerm.app", TERM = "xterm-256color" }), "terminal detection reads the environment")
-  check(images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "xterm-ghostty")
-    and not images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "xterm-256color"),
-    "inside tmux the outer client's TERM decides")
+  check(images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "ghostty 1.3.1 xterm-256color")
+    and images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, " xterm-kitty")
+    and not images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "iTerm2 3.6.11 xterm-256color"),
+    "inside tmux the outer client's reported terminal decides")
 
   local function image_marks()
     return vim.api.nvim_buf_get_extmarks(S.bufs.chat, img_ns, 0, -1, { details = true })
