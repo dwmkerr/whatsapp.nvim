@@ -291,6 +291,9 @@ function M.render()
   local chat = S.current and S.chat_by_jid[S.current]
   local width = S.text_width("chat", 80)
   local height = S.win_valid("chat") and vim.api.nvim_win_get_height(S.wins.chat) or 20
+  -- Same box rule as format.bubbles, so a picture is fitted to the widest
+  -- bubble the pane allows.
+  local bubble_inner_max = math.max(24, math.floor(width * 0.7)) - 4
   local lines, owners, spans
   -- A pending QR code takes the pane over even with a chat open: you can
   -- only be pairing because there is no session to read from anyway.
@@ -305,7 +308,9 @@ function M.render()
       vim.wo[S.wins.chat].wrap = S.qr == nil
     end
   elseif S.opts.layout == "bubbles" then
-    lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width)
+    lines, owners, spans = format.bubbles(msgs, chat and chat.is_group, width, function(m)
+      return images.size(m, bubble_inner_max)
+    end)
   else
     lines, owners, spans = format.conversation(msgs, chat and chat.is_group)
   end
@@ -367,13 +372,21 @@ function M.render()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  -- Pictures hang under the last line of their message, at the tag's
-  -- indent, so they sit inside the bubble's column and above the hint.
+  -- Pictures: inside the bubble above its footer, or under the message at
+  -- the tag's indent in the lines layout. Either way above the hint.
   images.clear(buf)
   for _, e in ipairs(media_rows) do
     if e.m.media_type == "image" then
-      local indent = (lines[e.row] or ""):match("^%s*") .. "  "
-      images.place(buf, e.last, indent, e.m)
+      if S.opts.layout == "bubbles" then
+        local footer = lines[e.last] or ""
+        local indent = footer:match("^%s*")
+        local inner = vim.fn.strdisplaywidth(footer) - #indent - 4
+        images.place(buf, e.last, indent, e.m, bubble_inner_max,
+          { inner = inner, hl = e.m.from_me and "WhatsAppBubbleMe" or "WhatsAppBubble" })
+      else
+        local indent = (lines[e.row] or ""):match("^%s*") .. "  "
+        images.place(buf, e.last, indent, e.m, width - #indent - 1)
+      end
     end
   end
   for _, s in ipairs(spans) do

@@ -24,7 +24,7 @@ end
 
 local resolved -- mode in use, nil until the first image asks
 local converter -- { name, png = fn(src, dst) }
-local cache = {} -- source path -> { state, cols, rows, png, id }
+local cache = {} -- source path -> { state, max_cols, cols, rows, png, id }
 local sent = {} -- kitty id -> true once the terminal holds the image
 local passthrough_set = false
 local asked = {} -- message id -> true once its cached path was requested
@@ -230,10 +230,10 @@ local function read_file(path)
 end
 
 -- Start preparing an image; re-render the chat when it is ready.
-local function prepare(src, jid)
-  local entry = { state = "pending" }
+local function prepare(src, jid, max_cols)
+  local entry = { state = "pending", max_cols = max_cols }
   cache[src] = entry
-  local max_cols, max_rows = S.opts.images.max_width, S.opts.images.max_height
+  local max_rows = S.opts.images.max_height
   local dst, cmd
   if src:lower():match("%.png$") then
     dst = src
@@ -282,11 +282,11 @@ function M.clear(buf)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 end
 
--- Hang the picture for message m under 1-based row `anchor`. Nothing
--- happens in tag mode or until the file is converted.
-function M.place(buf, anchor, indent, m)
-  if M.mode() == "tag" then
-    return
+-- The converted entry for m fitted to max_cols, starting conversion (or a
+-- refit after a resize) when there is none. nil until it is ready.
+local function entry_for(m, max_cols)
+  if M.mode() == "tag" or m.media_type ~= "image" then
+    return nil
   end
   if not m.path then
     -- History arrives with the cached flag but no path; the bridge answers
@@ -303,20 +303,44 @@ function M.place(buf, anchor, indent, m)
         end
       end)
     end
-    return
+    return nil
   end
+  max_cols = math.max(1, math.min(S.opts.images.max_width, max_cols))
   local entry = cache[m.path]
-  if not entry then
-    prepare(m.path, m.chat_jid)
-    return
+  if not entry or (entry.state ~= "pending" and entry.max_cols ~= max_cols) then
+    prepare(m.path, m.chat_jid, max_cols)
+    return nil
   end
-  if entry.state ~= "ready" then
+  return entry.state == "ready" and entry or nil
+end
+
+-- Cells the picture for m takes when fitted to max_cols, nil until known.
+function M.size(m, max_cols)
+  local entry = entry_for(m, max_cols)
+  if entry then
+    return entry.cols, entry.rows
+  end
+  return nil
+end
+
+-- Hang the picture for message m as virtual lines. `box` frames it inside
+-- a bubble: rows get the bubble's side borders and padding and sit above
+-- the footer row (anchor); without it rows hang below anchor at indent.
+function M.place(buf, anchor, indent, m, max_cols, box)
+  local entry = entry_for(m, max_cols)
+  if not entry then
     return
   end
   transmit(entry)
-  vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, {
-    virt_lines = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent),
-  })
+  local rows = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent)
+  if box then
+    local pad = string.rep(" ", math.max(0, box.inner - entry.cols))
+    for _, r in ipairs(rows) do
+      r[1] = { indent .. "│ ", box.hl }
+      r[3] = { pad .. " │", box.hl }
+    end
+  end
+  vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = rows, virt_lines_above = box ~= nil })
 end
 
 -- Forget transmitted images so a new session starts clean; the terminal

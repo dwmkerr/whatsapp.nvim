@@ -75,9 +75,10 @@ local function media_tag(m)
     return nil
   end
   local parts = { m.media_type }
-  -- A voice note's filename is always a generic audio.ogg; the duration and
-  -- waveform say more.
-  if m.media_type ~= "voice" and m.filename and m.filename ~= "" then
+  -- Generic names say nothing: voice notes are always audio.ogg and phone
+  -- photos arrive as image.jpg. A real filename is worth the space.
+  local generic = m.media_type == "voice" or (m.filename or ""):match("^image%.%w+$") ~= nil
+  if not generic and m.filename and m.filename ~= "" then
     parts[#parts + 1] = text.name(m.filename)
   end
   if m.seconds and m.seconds > 0 then
@@ -133,7 +134,9 @@ end
 
 -- Bubble layout: each message in a box, incoming on the left, own messages
 -- on the right. Returns the same triple as M.conversation.
-function M.bubbles(messages, is_group, width)
+-- image_cols(m) may return the width in cells of a picture that will hang
+-- inside m's bubble, so the box is drawn wide enough to frame it.
+function M.bubbles(messages, is_group, width, image_cols)
   local lines, owners, spans = {}, {}, {}
   local last_day = nil
   local max_box = math.max(24, math.floor(width * 0.7))
@@ -175,6 +178,10 @@ function M.bubbles(messages, is_group, width)
     local inner = math.min(inner_max, math.max(dw(who) + 2, #time + 2, 8))
     for _, l in ipairs(content) do
       inner = math.max(inner, dw(l))
+    end
+    local pic = image_cols and image_cols(m)
+    if pic then
+      inner = math.max(inner, pic)
     end
     inner = math.min(inner, inner_max)
     local box_w = inner + 4

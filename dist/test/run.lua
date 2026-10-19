@@ -32,7 +32,19 @@ return function()
   check(clines[1]:match("^── ") ~= nil, "conversation starts with a day separator")
   check(clines[2]:match("Alice: hi$") ~= nil and clines[3]:match("there$") ~= nil, "multi-line text continues indented")
   check(owners[3] and owners[3].id == "1", "continuation line maps to its message")
-  check(clines[4]:find("[image image.jpg ⇣]", 1, true) ~= nil, "media renders as a tag")
+  check(clines[4]:find("[image ⇣]", 1, true) ~= nil, "media renders as a tag, generic image.jpg name dropped: " .. clines[4])
+  local nlines = format.conversation({
+    { id = "5", text = "", ts = 1760390060, from_me = true, sender_name = "me", media_type = "image", filename = "holiday.jpg" },
+  }, false)
+  check(nlines[2]:find("[image holiday.jpg ⇣]", 1, true) ~= nil, "a real filename stays in the tag")
+  local wide = format.bubbles({
+    { id = "6", text = "", ts = 1760390060, from_me = false, sender_name = "Alice", sender = "x", media_type = "image", filename = "image.jpg" },
+  }, false, 80, function() return 30 end)
+  local head_line
+  for _, l in ipairs(wide) do
+    if l:find("╭", 1, true) then head_line = l end
+  end
+  check(head_line and vim.fn.strdisplaywidth(head_line) == 34, "bubble widens to frame a picture: " .. tostring(head_line))
   check(#spans > 0, "spans emitted")
 
   check(format.waveform({ 0, 100, 50, 0 }, 4) == "▁█▄▁", "waveform maps levels to blocks")
@@ -196,7 +208,7 @@ return function()
     "chat has buffer-local <CR> and gx")
   local tag_line = vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false)
   check(table.concat(tag_line, "\n"):find("[voice 0:03 ⇣]", 1, true) ~= nil, "undownloaded media shows ⇣")
-  check(table.concat(tag_line, "\n"):find("[image image.jpg ✓]", 1, true) ~= nil, "cached media shows ✓")
+  check(table.concat(tag_line, "\n"):find("[image ✓]", 1, true) ~= nil, "cached media shows ✓")
 
   -- Inline images: pure helpers first, then the kitty pipeline end to end
   -- against a two-pixel BMP, then tag mode leaves nothing behind.
@@ -258,7 +270,18 @@ return function()
     local marks = image_marks()
     local kvl = marks[1][4].virt_lines
     check(#kvl >= 1 and #kvl <= 12 and vim.fn.strchars(kvl[1][2][1]) % 3 == 0, "placeholder rows are cell triplets")
-    check(marks[1][2] + 1 == vim.api.nvim_buf_line_count(S.bufs.chat), "placeholder rows hang under the last line of the message")
+    check(marks[1][2] + 1 == vim.api.nvim_buf_line_count(S.bufs.chat) and not marks[1][4].virt_lines_above, "lines layout hangs the rows under the message")
+    S.opts.layout = "bubbles"
+    chat.render()
+    check(wait_for(function()
+      local ms = image_marks()
+      return ms[1] and ms[1][4].virt_lines_above == true
+    end, 5000), "bubbles layout puts the rows above the footer")
+    local bvl = image_marks()[1][4].virt_lines[1]
+    local footer = vim.api.nvim_buf_get_lines(S.bufs.chat, image_marks()[1][2], image_marks()[1][2] + 1, false)[1]
+    check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
+    check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
+    S.opts.layout = "lines"
     msgs[#msgs].path = nil
     images._set_mode("tag")
     chat.render()
