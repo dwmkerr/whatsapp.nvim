@@ -34,7 +34,6 @@ function M.ensure_buf()
   map("gu", function() wa.set_unread(M.jid_under_cursor(), false) end, "Mark read")
   map("<Tab>", function() wa.focus_next(1) end, "Next pane")
   map("<S-Tab>", function() wa.focus_next(-1) end, "Previous pane")
-  map("R", wa.refresh_names, "Refresh chats and contact names")
   -- Chat-pane keys that do not clash with list keys work from here too,
   -- so focus never decides whether a shortcut exists.
   map("gx", function() wa.open_media(require("whatsapp.ui.chat").media_target()) end, "Open media in the open chat")
