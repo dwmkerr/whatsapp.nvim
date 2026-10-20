@@ -17,7 +17,7 @@ Never commit to `main` and never push to `main`. This holds for this repository 
 
 ## Working
 
-- Build with `make -C dist build`, test with `make -C dist test`. Run the tests before every commit and check the exit code, not just the tail of the output.
+- Build with `make build`, test with `make test`. Run the tests before every commit and check the exit code, not just the tail of the output.
 - Conventional commit messages: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 - Comments explain why, never what changed.
 - Discuss UI and keybinding changes before building them. Prefer idioms Vim users already know (`gx`, `]m` `[m`, `<CR>` as the primary action, `g?` for help).

@@ -10,14 +10,14 @@ Install via your favourite plugin manager:
 
 ```vim
 " vim-plug
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist build' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
 ```lua
 -- lazy.nvim
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C dist build",
+  build = "make build",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/dist")
     require("whatsapp").setup()
@@ -97,13 +97,13 @@ Run from a local clone:
 git clone https://github.com/dwmkerr/whatsapp.nvim.git
 cd whatsapp.nvim
 # Compile the plugin (needs Go and a C compiler).
-make -C dist build
+make build
 
 # Don't forget to change vimrc/nvim config to:
-# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist build' }
+# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
-`make -C dist test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
+`make test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
 
 I have found that when working live in WhatsApp, the best flow is:
 
