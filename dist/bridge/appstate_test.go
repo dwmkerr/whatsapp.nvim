@@ -9,24 +9,30 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 )
 
-func TestResyncAppStateOnlyOnMismatchAndOnce(t *testing.T) {
+func TestAppStateStepEscalatesOnceAndOnlyOnMismatch(t *testing.T) {
 	w := &WA{log: stderrLogger{module: "test"}}
+	low := appstate.WAPatchRegularLow
 	mismatch := fmt.Errorf("failed to decode: %w", appstate.ErrMismatchingLTHash)
+	step := func(name appstate.WAPatchName, full bool, err error) string {
+		return w.appStateStep(&events.AppStateSyncError{Name: name, FullSync: full, Error: err})
+	}
 
-	w.resyncAppState(&events.AppStateSyncError{Name: appstate.WAPatchRegularLow, FullSync: true, Error: mismatch})
-	if _, ok := w.resynced.Load(appstate.WAPatchRegularLow); ok {
-		t.Fatal("a failed full sync must not trigger another full sync")
+	if got := step(low, false, errors.New("network")); got != "" {
+		t.Fatalf("other errors are whatsmeow's business, got %q", got)
 	}
-	w.resyncAppState(&events.AppStateSyncError{Name: appstate.WAPatchRegularLow, Error: errors.New("network")})
-	if _, ok := w.resynced.Load(appstate.WAPatchRegularLow); ok {
-		t.Fatal("only a hash mismatch warrants a resync")
+	if got := step(low, false, mismatch); got != "fetch" {
+		t.Fatalf("first mismatch pulls a snapshot, got %q", got)
 	}
-	w.resyncAppState(&events.AppStateSyncError{Name: appstate.WAPatchRegularLow, Error: mismatch})
-	if _, ok := w.resynced.Load(appstate.WAPatchRegularLow); !ok {
-		t.Fatal("mismatch should schedule a resync")
+	if got := step(low, true, mismatch); got != "recover" {
+		t.Fatalf("a snapshot that does not verify asks the phone, got %q", got)
 	}
-	w.resyncAppState(&events.AppStateSyncError{Name: appstate.WAPatchRegularLow, Error: mismatch})
-	if _, ok := w.resynced.Load(appstate.WAPatchCriticalBlock); ok {
-		t.Fatal("other collections stay untouched")
+	if got := step(low, false, mismatch); got != "" {
+		t.Fatalf("no third step, got %q", got)
+	}
+	if got := step(appstate.WAPatchRegular, true, mismatch); got != "recover" {
+		t.Fatalf("a failed full sync on a fresh collection goes straight to the phone, got %q", got)
+	}
+	if got := step(appstate.WAPatchRegularHigh, false, mismatch); got != "fetch" {
+		t.Fatalf("collections are tracked separately, got %q", got)
 	}
 }
