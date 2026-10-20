@@ -64,6 +64,7 @@ While a chat is open and the terminal has focus the device is marked online, so 
 | `:WhatsApp logout` | Unlink this device from your phone and forget the local session |
 | `:WhatsApp status` | Bridge status |
 | `:WhatsApp stop` | Close and kill the bridge |
+| `:WhatsApp names` | Swap bare phone numbers for contact names; runs by itself on connect, rarely needed |
 
 Chat list (left):
 
@@ -74,7 +75,6 @@ Chat list (left):
 | `u` | Jump to next unread chat |
 | `f` | Cycle the filter: all / unread / groups |
 | `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
-| `R` | Refresh |
 | `gx` `]m` `[m` | Open / next / previous media in the open chat |
 | `K` `L` | Older messages / toggle layout in the open chat |
 | `<Tab>` `<S-Tab>` | Cycle panes |
