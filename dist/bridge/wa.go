@@ -27,17 +27,18 @@ import (
 
 // WA owns the whatsmeow client and translates its events into editor events.
 type WA struct {
-	cli       *whatsmeow.Client
-	store     *Store
-	out       *Writer
-	dir       string
-	log       waLog.Logger
-	pairing   sync.Mutex
-	names     sync.Map // jid string -> display name, avoids repeated contact lookups
-	syncDone  bool
-	available bool // editor asked to stay "online", see SetPresence
-	downloads chan struct{}
-	resynced  sync.Map // app state collections pulled fresh this run, see resyncAppState
+	cli           *whatsmeow.Client
+	store         *Store
+	out           *Writer
+	dir           string
+	log           waLog.Logger
+	pairing       sync.Mutex
+	names         sync.Map // jid string -> display name, avoids repeated contact lookups
+	syncDone      bool
+	available     bool // editor asked to stay "online", see SetPresence
+	downloads     chan struct{}
+	appStateMu    sync.Mutex
+	appStateStage map[appstate.WAPatchName]int // how far recovery has gone, see resyncAppState
 }
 
 func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
@@ -217,6 +218,9 @@ func (w *WA) handleEvent(evt interface{}) {
 		w.out.Emit("sync.done", map[string]int{"count": v.Count})
 		w.RefreshNames(context.Background())
 	case *events.AppStateSyncComplete:
+		if v.Recovery {
+			w.log.Infof("app state %s recovered from the phone at v%d", v.Name, v.Version)
+		}
 		// Contact names arrive here, usually after history has already been
 		// stored under bare phone numbers.
 		w.RefreshNames(context.Background())
@@ -765,26 +769,63 @@ func mediaPath(root, chatJID, msgID, filename string) (string, error) {
 	return path, nil
 }
 
-// resyncAppState pulls a fresh snapshot of an app state collection whose
-// local hash no longer matches the server's. whatsmeow only logs that
-// mismatch, and from then on every incremental patch for the collection
-// fails: the phone's read marks stop arriving and ours are refused with a
-// 409, so chats read here stay unread on the phone. Once per collection per
-// run, so a fault the snapshot does not cure cannot loop.
+// Recovery of an app state collection goes one step further on each failure
+// and never repeats a step, so a fault nothing here can cure cannot loop.
+const (
+	appStateFresh = iota
+	appStateFetched
+	appStateRecovering
+)
+
+// appStateStep decides what resyncAppState does for a failed sync: pull a
+// fresh snapshot first, and when that snapshot does not verify either, ask
+// the phone for its copy. Anything but a hash mismatch is left to whatsmeow.
+func (w *WA) appStateStep(evt *events.AppStateSyncError) string {
+	if !errors.Is(evt.Error, appstate.ErrMismatchingLTHash) {
+		return ""
+	}
+	w.appStateMu.Lock()
+	defer w.appStateMu.Unlock()
+	if w.appStateStage == nil {
+		w.appStateStage = map[appstate.WAPatchName]int{}
+	}
+	stage := w.appStateStage[evt.Name]
+	switch {
+	case stage == appStateFresh && !evt.FullSync:
+		w.appStateStage[evt.Name] = appStateFetched
+		return "fetch"
+	case stage <= appStateFetched:
+		w.appStateStage[evt.Name] = appStateRecovering
+		return "recover"
+	}
+	return ""
+}
+
+// resyncAppState repairs a collection whose local hash no longer matches the
+// server's. whatsmeow only logs that mismatch, and from then on every
+// incremental patch for the collection fails: for regular_low the phone's
+// read marks stop arriving and ours are refused with a 409, so chats read
+// here stay unread on the phone. A full fetch resets the hash when the
+// snapshot verifies; after a key rotation it does not, and only the phone's
+// own copy of the collection does (whatsmeow issue 858).
 func (w *WA) resyncAppState(evt *events.AppStateSyncError) {
-	if evt.FullSync || !errors.Is(evt.Error, appstate.ErrMismatchingLTHash) {
-		return
-	}
-	if _, done := w.resynced.LoadOrStore(evt.Name, true); done {
-		return
-	}
-	w.log.Warnf("app state %s out of sync, pulling a fresh snapshot", evt.Name)
 	// The event is dispatched from inside the failing sync, which still
-	// holds whatsmeow's app state lock, so the resync must run after this
+	// holds whatsmeow's app state lock, so both steps run after this
 	// handler returns.
-	go func() {
-		if err := w.cli.FetchAppState(context.Background(), evt.Name, true, false); err != nil {
-			w.log.Warnf("app state %s resync: %v", evt.Name, err)
-		}
-	}()
+	switch w.appStateStep(evt) {
+	case "fetch":
+		w.log.Warnf("app state %s out of sync, pulling a fresh snapshot", evt.Name)
+		go func() {
+			if err := w.cli.FetchAppState(context.Background(), evt.Name, true, false); err != nil {
+				w.log.Warnf("app state %s resync: %v", evt.Name, err)
+			}
+		}()
+	case "recover":
+		w.log.Warnf("app state %s snapshot does not verify either, asking the phone for its copy", evt.Name)
+		go func() {
+			if _, err := w.cli.SendPeerMessage(context.Background(), whatsmeow.BuildAppStateRecoveryRequest(evt.Name)); err != nil {
+				w.log.Warnf("app state %s recovery request: %v", evt.Name, err)
+			}
+		}()
+	}
 }
