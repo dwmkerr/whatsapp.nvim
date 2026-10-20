@@ -107,7 +107,40 @@ return function()
   check(splash:find("WhatsApp", 1, true) ~= nil and splash:find("next unread", 1, true) ~= nil, "splash shows keys")
 
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
-  check(#list_lines == 2 and list_lines[1]:find("Alice", 1, true) ~= nil, "list buffer shows Alice first")
+  check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
+  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
+  check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
+
+  -- f cycles the filter under the title; <CR> on the filter line does too.
+  local list = require("whatsapp.ui.list")
+  list.cycle_filter()
+  list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(S.filter == "unread" and #list_lines == 2 and list_lines[2]:find("Alice", 1, true) ~= nil, "unread filter keeps only unread chats")
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cycling the filter parks the cursor on the first chat")
+  list.cycle_filter()
+  list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(S.filter == "groups" and #list_lines == 2 and list_lines[2]:find("Climbing", 1, true) ~= nil, "groups filter keeps only groups")
+  check(list.jid_under_cursor() == "222@g.us", "jid under cursor accounts for the filter line")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
+  check(list.jid_under_cursor() == nil, "filter line has no chat")
+  vim.api.nvim_set_current_win(S.wins.list)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+  check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all")
+  S.filter = "groups"
+  list.render()
+  check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("Climbing", 1, true) ~= nil, "render honours a preset filter")
+  S.filter = "unread"
+  S.chat_by_jid["111@s.whatsapp.net"].unread = 0
+  list.render()
+  check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no unread chats", 1, true) ~= nil, "empty filter says so")
+  S.chat_by_jid["111@s.whatsapp.net"].unread = 2
+  S.filter = "all"
+  list.render()
+  vim.api.nvim_win_set_cursor(S.wins.list, { 3, 0 })
+  list.next_unread()
+  check(S.current == "111@s.whatsapp.net" and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "u wraps to the unread chat past the filter line")
+  S.current = nil
 
   wa.open_chat("111@s.whatsapp.net")
   check(wait_for(function() return S.messages["111@s.whatsapp.net"] ~= nil end), "messages loaded")
@@ -353,7 +386,7 @@ return function()
   S.chat_by_jid["111@s.whatsapp.net"].unread = 0
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.current == nil and S.chat_by_jid["111@s.whatsapp.net"].unread == 1, "toggle_unread flags and closes the open chat")
-  check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 0, 1, false)[1], "●"), "list shows the unread mark")
+  check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1], "●"), "list shows the unread mark")
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.chat_by_jid["111@s.whatsapp.net"].unread == 0, "toggle_unread clears again")
   wa.set_unread("111@s.whatsapp.net", true)

@@ -36,6 +36,7 @@ local function define_highlights()
     vim.api.nvim_set_hl(0, name, opts)
   end
   hl("WhatsAppUnread", { bold = true })
+  hl("WhatsAppFilter", { bold = true })
   hl("WhatsAppCurrent", { link = "Visual" })
   hl("WhatsAppTime", { link = "Comment" })
   hl("WhatsAppSender", { link = "Identifier" })
