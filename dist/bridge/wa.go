@@ -37,6 +37,7 @@ type WA struct {
 	syncDone  bool
 	available bool // editor asked to stay "online", see SetPresence
 	downloads chan struct{}
+	resynced  sync.Map // app state collections pulled fresh this run, see resyncAppState
 }
 
 func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
@@ -184,6 +185,8 @@ func (w *WA) handleEvent(evt interface{}) {
 		if w.available {
 			_ = w.SetPresence(context.Background(), true)
 		}
+	case *events.AppStateSyncError:
+		w.resyncAppState(v)
 	case *events.Disconnected:
 		w.out.Emit("disconnected", nil)
 	case *events.StreamReplaced:
@@ -760,4 +763,28 @@ func mediaPath(root, chatJID, msgID, filename string) (string, error) {
 		return "", errors.New("invalid media path")
 	}
 	return path, nil
+}
+
+// resyncAppState pulls a fresh snapshot of an app state collection whose
+// local hash no longer matches the server's. whatsmeow only logs that
+// mismatch, and from then on every incremental patch for the collection
+// fails: the phone's read marks stop arriving and ours are refused with a
+// 409, so chats read here stay unread on the phone. Once per collection per
+// run, so a fault the snapshot does not cure cannot loop.
+func (w *WA) resyncAppState(evt *events.AppStateSyncError) {
+	if evt.FullSync || !errors.Is(evt.Error, appstate.ErrMismatchingLTHash) {
+		return
+	}
+	if _, done := w.resynced.LoadOrStore(evt.Name, true); done {
+		return
+	}
+	w.log.Warnf("app state %s out of sync, pulling a fresh snapshot", evt.Name)
+	// The event is dispatched from inside the failing sync, which still
+	// holds whatsmeow's app state lock, so the resync must run after this
+	// handler returns.
+	go func() {
+		if err := w.cli.FetchAppState(context.Background(), evt.Name, true, false); err != nil {
+			w.log.Warnf("app state %s resync: %v", evt.Name, err)
+		}
+	}()
 }
