@@ -27,7 +27,7 @@ The plugin lives in the `dist/` directory of the repo, so point your plugin mana
 vim-plug:
 
 ```vim
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist build' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
 lazy.nvim:
@@ -35,7 +35,7 @@ lazy.nvim:
 ```lua
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C dist build",
+  build = "make build",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/nvim")
     require("whatsapp").setup()
