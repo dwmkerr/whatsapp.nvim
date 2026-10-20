@@ -16,7 +16,6 @@ local keys = {
     { "i", "open chat and compose" },
     { "u", "next unread chat" },
     { "gU gu ~", "mark unread / read / toggle" },
-    { "R", "refresh chats and contact names" },
     { "gx ]m [m", "open / next / previous media in the open chat" },
     { "K L", "older messages / toggle layout in the open chat" },
     { "<Tab>", "next pane" },
