@@ -16,6 +16,7 @@ local defaults = {
   bin = nil, -- defaults to <plugin>/bin/wa-bridge
   store = vim.fn.stdpath("data") .. "/whatsapp",
   list_width = 32,
+  unread_count = false, -- show how many messages are unread, left of the time
   compose_height = 3,
   page_size = 100,
   notify = true,
