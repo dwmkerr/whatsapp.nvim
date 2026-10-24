@@ -58,7 +58,7 @@ end
 function M.render()
   local buf = M.ensure_buf()
   local width = S.text_width("list", S.opts.list_width)
-  local lines, jids, unread = format.chat_list(S.chats, width)
+  local lines, jids, unread = format.chat_list(S.chats, width, S.opts.unread_count)
   if S.win_valid("list") then
     local n = 0
     for _, c in ipairs(S.chats) do
