@@ -111,7 +111,7 @@ function M.render()
   local buf = M.ensure_buf()
   local width = S.text_width("list", S.opts.list_width)
   local chats = M.visible_chats()
-  local lines, jids, unread = format.chat_list(chats, width)
+  local lines, jids, unread = format.chat_list(chats, width, S.opts.unread_count)
 
   -- Row 1 is the filter line, so every chat row sits one below its index.
   -- The key leads in Special like every other hint; the active chip is bold

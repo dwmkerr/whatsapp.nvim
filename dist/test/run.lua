@@ -24,6 +24,13 @@ return function()
     { jid = "b", name = "Bob", last_ts = 0, unread = 0 },
   }, 20)
   check(vim.startswith(lines[1], "●") and unread[1] and jids[2] == "b", "chat_list marks unread and maps jids")
+  check(lines[1]:match(" 3 ") == nil, "chat_list hides counts by default")
+  local counted = format.chat_list({
+    { jid = "a", name = "Alice", last_ts = 0, unread = 3 },
+    { jid = "b", name = "Bob", last_ts = 0, unread = 0 },
+  }, 20, true)
+  check(counted[1]:match(" 3 $") ~= nil and vim.fn.strdisplaywidth(counted[1]) == 20, "chat_list shows the count left of the time")
+  check(counted[2] == lines[2], "chat_list leaves read chats unchanged with counts on")
 
   local clines, owners, spans = format.conversation({
     { id = "1", text = "hi\nthere", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },

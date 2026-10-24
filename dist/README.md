@@ -129,6 +129,7 @@ Attachments download without opening an application. Use `gx` to open one, with 
 require("whatsapp").setup({
   store = vim.fn.stdpath("data") .. "/whatsapp", -- session and message databases
   list_width = 32,
+  unread_count = false,     -- show how many messages are unread, left of the time
   compose_height = 3,
   page_size = 100,          -- messages per page
   notify = true,            -- vim.notify for messages in chats you are not viewing

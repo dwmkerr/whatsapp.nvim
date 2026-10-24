@@ -25,15 +25,18 @@ function M.short_time(ts)
   return os.date("%d %b", ts)
 end
 
--- Chat list: "● Name              12:40". Returns lines, jids per line, and
--- which lines are unread.
-function M.chat_list(chats, width)
+-- Chat list: "● Name              12:40", or "● Name           3 12:40" with
+-- show_counts. Returns lines, jids per line, and which lines are unread.
+function M.chat_list(chats, width, show_counts)
   local lines, jids, unread = {}, {}, {}
   for i, c in ipairs(chats) do
     local mark = c.unread > 0 and "●" or " "
-    local time = M.short_time(c.last_ts)
-    local name_width = math.max(4, width - 2 - #time - 1)
-    lines[i] = mark .. " " .. pad_right(text.name(c.name ~= "" and c.name or c.jid), name_width) .. " " .. time
+    local right = M.short_time(c.last_ts)
+    if show_counts and c.unread > 0 then
+      right = c.unread .. " " .. right
+    end
+    local name_width = math.max(4, width - 2 - #right - 1)
+    lines[i] = mark .. " " .. pad_right(text.name(c.name ~= "" and c.name or c.jid), name_width) .. " " .. right
     jids[i] = c.jid
     unread[i] = c.unread > 0
   end
