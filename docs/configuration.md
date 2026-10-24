@@ -7,6 +7,7 @@ require("whatsapp").setup({
   bin = nil,                                     -- bridge binary, default <plugin>/bin/wa-bridge
   store = vim.fn.stdpath("data") .. "/whatsapp", -- session, messages and media cache
   list_width = 32,
+  unread_count = false,                          -- unread message count left of the time
   compose_height = 3,
   page_size = 100,                               -- messages per page, K loads more
   notify = true,                                 -- vim.notify for chats you are not viewing
