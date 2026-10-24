@@ -65,6 +65,9 @@ func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open message store: %w", err)
 	}
+	if err := st.CapUnreadAtOwnReply(); err != nil {
+		log.Warnf("cap unread counts: %v", err)
+	}
 	w := &WA{cli: whatsmeow.NewClient(device, log.Sub("client")), store: st, out: out, dir: dir, log: log,
 		downloads: make(chan struct{}, 2)}
 	w.cli.AddEventHandler(w.handleEvent)
@@ -204,6 +207,8 @@ func (w *WA) handleEvent(evt interface{}) {
 		w.handleMessage(v, true)
 	case *events.HistorySync:
 		w.handleHistorySync(v)
+	case *events.Receipt:
+		w.handleReceipt(v)
 	case *events.OfflineSyncCompleted:
 		w.syncDone = true
 		w.out.Emit("sync.done", map[string]int{"count": v.Count})
@@ -345,7 +350,10 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 	if !fresh || !live {
 		return
 	}
-	if !m.FromMe {
+	if m.FromMe {
+		// Sending in a chat reads it on the phone, wherever it was sent from.
+		_ = w.store.ClearUnread(chat.String())
+	} else {
 		_ = w.store.IncrementUnread(chat.String())
 	}
 	if m.QuotedID != "" {
@@ -354,6 +362,33 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 		}
 	}
 	w.out.Emit("message", map[string]interface{}{"chat_name": name, "message": m})
+}
+
+// handleReceipt follows reads made on the phone or another linked device.
+// Those devices tell the others through our own read receipts, type read
+// or, with read receipts turned off, read-self; the app state mark-read
+// patch only covers the explicit "Mark as read" toggle.
+func (w *WA) handleReceipt(evt *events.Receipt) {
+	if !evt.IsFromMe || (evt.Type != types.ReceiptTypeRead && evt.Type != types.ReceiptTypeReadSelf) {
+		return
+	}
+	chat := w.canonical(context.Background(), evt.Chat, evt.RecipientAlt).String()
+	var newest int64
+	for _, id := range evt.MessageIDs {
+		if m, err := w.store.GetMessage(chat, id); err == nil && m.TS > newest {
+			newest = m.TS
+		}
+	}
+	// A receipt for messages this store never saw still means the phone
+	// is caught up past everything stored before it.
+	if newest == 0 {
+		newest = evt.Timestamp.Unix()
+	}
+	if err := w.store.ReadUpTo(chat, newest); err != nil {
+		w.log.Warnf("read receipt for %s: %v", chat, err)
+		return
+	}
+	w.out.Emit("chats.changed", nil)
 }
 
 func (w *WA) handleHistorySync(evt *events.HistorySync) {

@@ -166,6 +166,31 @@ func (s *Store) SetUnread(jid string, n int) error {
 	return err
 }
 
+// ReadUpTo lowers a chat's unread count to the incoming messages newer than
+// ts, the time of the newest message read on another device. It never
+// raises the count: a receipt only ever says that something was read.
+func (s *Store) ReadUpTo(jid string, ts int64) error {
+	_, err := s.db.Exec(`
+		UPDATE chats SET unread = MIN(unread, (
+			SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND from_me = 0 AND ts > ?
+		)) WHERE jid = ?`, jid, ts, jid)
+	return err
+}
+
+// CapUnreadAtOwnReply applies the phone's rule that sending in a chat reads
+// it, so no chat counts more unread messages than arrived after the last
+// one sent from this account. It repairs counts left behind by read
+// receipts this store never saw.
+func (s *Store) CapUnreadAtOwnReply() error {
+	_, err := s.db.Exec(`
+		UPDATE chats SET unread = MIN(unread, (
+			SELECT COUNT(*) FROM messages m WHERE m.chat_jid = chats.jid AND m.from_me = 0
+			AND m.ts > (SELECT MAX(o.ts) FROM messages o WHERE o.chat_jid = chats.jid AND o.from_me = 1)
+		)) WHERE unread > 0
+		AND EXISTS (SELECT 1 FROM messages o WHERE o.chat_jid = chats.jid AND o.from_me = 1)`)
+	return err
+}
+
 func (s *Store) ChatName(jid string) string {
 	var name string
 	_ = s.db.QueryRow(`SELECT name FROM chats WHERE jid = ?`, jid).Scan(&name)
