@@ -24,6 +24,7 @@ local M = {
   pairing = false,   -- pair.start sent, QR code not here yet
   typing = nil,      -- { jid, sender, who, media } while the other party types in the open chat
   available = false, -- bridge asked to show this device online
+  out_of_sync = {},  -- app state collections waiting on the phone's copy, name -> true
 }
 
 -- Columns available for text in a window, after number/sign columns the
@@ -35,6 +36,19 @@ function M.text_width(name, fallback)
   local w = M.wins[name]
   local info = vim.fn.getwininfo(w)[1]
   return vim.api.nvim_win_get_width(w) - (info and info.textoff or 0)
+end
+
+-- What an out-of-sync app state collection stops syncing, in the user's
+-- words. Only regular_low holds read marks; the rest hold pins, mutes,
+-- contacts and the like.
+function M.out_of_sync_label(name)
+  if name == nil then
+    if M.out_of_sync.regular_low then
+      return "read marks"
+    end
+    return next(M.out_of_sync) and "chat settings" or nil
+  end
+  return name == "regular_low" and "read marks" or "chat settings"
 end
 
 function M.set_chats(chats)

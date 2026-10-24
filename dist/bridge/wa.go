@@ -186,6 +186,11 @@ func (w *WA) handleEvent(evt interface{}) {
 		if w.available {
 			_ = w.SetPresence(context.Background(), true)
 		}
+		// The phone only answers a recovery request while WhatsApp is open
+		// on it, so every reconnect asks again until one arrives.
+		for _, name := range w.appStateWaiting() {
+			w.requestAppStateRecovery(name)
+		}
 	case *events.AppStateSyncError:
 		w.resyncAppState(v)
 	case *events.Disconnected:
@@ -220,6 +225,9 @@ func (w *WA) handleEvent(evt interface{}) {
 	case *events.AppStateSyncComplete:
 		if v.Recovery {
 			w.log.Infof("app state %s recovered from the phone at v%d", v.Name, v.Version)
+		}
+		if w.appStateRepaired(v.Name) {
+			w.out.Emit("appstate.synced", map[string]string{"name": string(v.Name)})
 		}
 		// Contact names arrive here, usually after history has already been
 		// stored under bare phone numbers.
@@ -771,6 +779,7 @@ func mediaPath(root, chatJID, msgID, filename string) (string, error) {
 
 // Recovery of an app state collection goes one step further on each failure
 // and never repeats a step, so a fault nothing here can cure cannot loop.
+// Only a completed sync of the collection starts it over.
 const (
 	appStateFresh = iota
 	appStateFetched
@@ -801,13 +810,39 @@ func (w *WA) appStateStep(evt *events.AppStateSyncError) string {
 	return ""
 }
 
+// appStateWaiting lists collections waiting on the phone's copy.
+func (w *WA) appStateWaiting() []appstate.WAPatchName {
+	w.appStateMu.Lock()
+	defer w.appStateMu.Unlock()
+	var out []appstate.WAPatchName
+	for name, stage := range w.appStateStage {
+		if stage == appStateRecovering {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// appStateRepaired starts a collection's recovery over after a sync that
+// verified, and reports whether the collection had been out of sync.
+func (w *WA) appStateRepaired(name appstate.WAPatchName) bool {
+	w.appStateMu.Lock()
+	defer w.appStateMu.Unlock()
+	stage := w.appStateStage[name]
+	delete(w.appStateStage, name)
+	return stage != appStateFresh
+}
+
 // resyncAppState repairs a collection whose local hash no longer matches the
 // server's. whatsmeow only logs that mismatch, and from then on every
 // incremental patch for the collection fails: for regular_low the phone's
 // read marks stop arriving and ours are refused with a 409, so chats read
 // here stay unread on the phone. A full fetch resets the hash when the
-// snapshot verifies; after a key rotation it does not, and only the phone's
-// own copy of the collection does (whatsmeow issue 858).
+// snapshot verifies. On accounts the phone has moved to LID addressing the
+// server's snapshot itself can fail to verify, so a fresh fetch, or pairing
+// again, never helps; only the phone's own copy does (whatsmeow issues 858
+// and 1301). The editor is told while that copy is outstanding, because
+// read marks do not sync until it arrives.
 func (w *WA) resyncAppState(evt *events.AppStateSyncError) {
 	// The event is dispatched from inside the failing sync, which still
 	// holds whatsmeow's app state lock, so both steps run after this
@@ -822,10 +857,15 @@ func (w *WA) resyncAppState(evt *events.AppStateSyncError) {
 		}()
 	case "recover":
 		w.log.Warnf("app state %s snapshot does not verify either, asking the phone for its copy", evt.Name)
-		go func() {
-			if _, err := w.cli.SendPeerMessage(context.Background(), whatsmeow.BuildAppStateRecoveryRequest(evt.Name)); err != nil {
-				w.log.Warnf("app state %s recovery request: %v", evt.Name, err)
-			}
-		}()
+		w.out.Emit("appstate.waiting", map[string]string{"name": string(evt.Name)})
+		w.requestAppStateRecovery(evt.Name)
 	}
+}
+
+func (w *WA) requestAppStateRecovery(name appstate.WAPatchName) {
+	go func() {
+		if _, err := w.cli.SendPeerMessage(context.Background(), whatsmeow.BuildAppStateRecoveryRequest(name)); err != nil {
+			w.log.Warnf("app state %s recovery request: %v", name, err)
+		}
+	}()
 }

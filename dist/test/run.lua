@@ -105,6 +105,17 @@ return function()
   check(not S.win_valid("compose"), "compose hidden until a chat opens")
   local splash = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(splash:find("WhatsApp", 1, true) ~= nil and splash:find("next unread", 1, true) ~= nil, "splash shows keys")
+  local function splash_has(s)
+    return table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find(s, 1, true) ~= nil
+  end
+  check(not splash_has("out of sync"), "splash quiet while read marks sync")
+  events["appstate.waiting"]({ name = "regular_low" })
+  check(splash_has("read marks out of sync · open WhatsApp on your phone"), "splash says read marks wait on the phone")
+  events["appstate.synced"]({ name = "regular_low" })
+  check(not splash_has("out of sync"), "splash clears once the phone's copy arrives")
+  events["appstate.waiting"]({ name = "regular_high" })
+  check(splash_has("chat settings out of sync"), "other collections are not called read marks")
+  events["appstate.synced"]({ name = "regular_high" })
 
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")

@@ -51,6 +51,8 @@ Then pair once:
 
 Scan the QR code from your phone: WhatsApp > Settings > Linked Devices > Link a Device. History syncs in the background.
 
+If the splash shows "read marks out of sync", open WhatsApp on your phone. On some accounts WhatsApp's server copy of read marks, pins and mutes cannot be verified, and only the phone can send a good copy. It answers while the app is open. Pairing again does not help.
+
 ## Use
 
 While a chat is open and the terminal has focus the device is marked online, so WhatsApp sends typing notifications and contacts can see you as online, just like the phone with a chat on screen. The indicator shows as a bubble under the last message.
@@ -157,7 +159,7 @@ One JSON object per line. Requests carry an `id` and `method`; responses echo th
 
 Methods: `status`, `pair.start`, `logout`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `presence {available}`, `media.download {jid, id}`, `contacts.search {query}`.
 
-Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `typing {chat, sender, sender_name, state, media}`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `fatal`.
+Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `typing {chat, sender, sender_name, state, media}`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `appstate.waiting {name}`, `appstate.synced {name}`, `fatal`.
 
 ## Privacy
 
