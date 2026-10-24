@@ -196,6 +196,22 @@ local function wire_events()
     end
     chat.render()
   end)
+  -- A collection waiting on the phone stops syncing until the phone answers,
+  -- and nothing here can cure it, so say so rather than fail quietly.
+  client.on("appstate.waiting", function(d)
+    if not S.out_of_sync[d.name] then
+      S.out_of_sync[d.name] = true
+      notify(S.out_of_sync_label(d.name) .. " are out of sync, open WhatsApp on your phone to repair them", vim.log.levels.WARN)
+    end
+    chat.render()
+  end)
+  client.on("appstate.synced", function(d)
+    if S.out_of_sync[d.name] then
+      S.out_of_sync[d.name] = nil
+      notify(S.out_of_sync_label(d.name) .. " back in sync")
+    end
+    chat.render()
+  end)
   client.on("chats.changed", function()
     M.refresh_chats()
   end)
@@ -758,6 +774,7 @@ function M.open()
     -- Fresh bridge, fresh status: a stale "connected" would skip the
     -- connecting splash.
     S.status = { paired = nil, connected = false }
+    S.out_of_sync = {}
     S.synced = false
     S.sync = nil
     if not client.start(S.opts.bin, S.opts.store) then

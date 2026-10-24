@@ -263,6 +263,10 @@ local function splash(width, height)
     key("q", "close")
     rows[#rows + 1] = {}
     note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
+    local stale = S.out_of_sync_label()
+    if stale then
+      rows[#rows + 1] = { text = stale .. " out of sync · open WhatsApp on your phone", hl = "WarningMsg" }
+    end
   end
 
   local keyw = 0

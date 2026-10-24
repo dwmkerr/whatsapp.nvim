@@ -36,3 +36,26 @@ func TestAppStateStepEscalatesOnceAndOnlyOnMismatch(t *testing.T) {
 		t.Fatalf("collections are tracked separately, got %q", got)
 	}
 }
+
+func TestAppStateWaitsForThePhoneUntilASyncCompletes(t *testing.T) {
+	w := &WA{log: stderrLogger{module: "test"}}
+	low := appstate.WAPatchRegularLow
+	mismatch := fmt.Errorf("failed to verify snapshot: %w", appstate.ErrMismatchingLTHash)
+
+	if w.appStateRepaired(low) {
+		t.Fatal("a collection that never failed was reported repaired")
+	}
+	w.appStateStep(&events.AppStateSyncError{Name: low, FullSync: true, Error: mismatch})
+	if got := w.appStateWaiting(); len(got) != 1 || got[0] != low {
+		t.Fatalf("want regular_low waiting on the phone, got %v", got)
+	}
+	if !w.appStateRepaired(low) {
+		t.Fatal("recovery was not reported")
+	}
+	if got := w.appStateWaiting(); len(got) != 0 {
+		t.Fatalf("still waiting after recovery: %v", got)
+	}
+	if got := w.appStateStep(&events.AppStateSyncError{Name: low, Error: mismatch}); got != "fetch" {
+		t.Fatalf("a later mismatch starts over with a fetch, got %q", got)
+	}
+}
