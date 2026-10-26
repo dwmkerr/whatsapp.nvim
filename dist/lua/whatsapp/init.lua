@@ -447,7 +447,9 @@ function M.send_compose(jid)
     if S.messages[sent.chat_jid] then
       table.insert(S.messages[sent.chat_jid], sent)
     end
-    chat.render()
+    -- Replying moves the cursor up to the quoted message, so following only
+    -- from the bottom would leave the sent message out of view.
+    chat.render({ bottom = S.current == jid })
     M.refresh_chats()
   end)
 end
