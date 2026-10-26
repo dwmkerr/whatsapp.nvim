@@ -202,6 +202,18 @@ return function()
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
 
+  -- Replying means moving the cursor up to the quoted message; the sent
+  -- message must still come into view, as on the phone.
+  vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
+  vim.api.nvim_buf_set_lines(S.bufs.compose, 0, -1, false, { "after scrolling up" })
+  vim.cmd("write")
+  check(wait_for(function()
+    local l = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+    return l:find("after scrolling up", 1, true) ~= nil
+  end), "second send echoes into the chat")
+  check(vim.api.nvim_win_get_cursor(S.wins.chat)[1] == vim.api.nvim_buf_line_count(S.bufs.chat),
+    "sending scrolls to the sent message even when the view was scrolled up")
+
   -- Media hint sits on the target attachment: under the cursor, else the
   -- newest one. ]m / [m move between attachments.
   local chat = require("whatsapp.ui.chat")
