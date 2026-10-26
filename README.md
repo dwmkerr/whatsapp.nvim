@@ -10,14 +10,14 @@ Install via your favourite plugin manager:
 
 ```vim
 " vim-plug
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
 ```lua
 -- lazy.nvim
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C dist",
+  build = "make build",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/dist")
     require("whatsapp").setup()
@@ -45,6 +45,7 @@ The list of chats is shown on the left. Threads with unread messages are shown i
 
 - `<CR>` opens the chat under the cursor, `i` opens it and starts composing
 - `u` jumps to the next unread chat
+- `f` cycles the filter on the line under the title: all, unread, groups (`<CR>` on that line does the same)
 - `gU` / `gu` / `~` mark unread / read / toggle, mirrored to your phone (as a reminder, think of read as lowercase and unread as uppercase)
 - `<Tab>` / `<S-Tab>` cycle between the list, the conversation and the compose pane
 - `R` replies to the message under the cursor, `r` reacts to it
@@ -103,13 +104,13 @@ Run from a local clone:
 git clone https://github.com/dwmkerr/whatsapp.nvim.git
 cd whatsapp.nvim
 # Compile the plugin (needs Go and a C compiler).
-make -C dist build
+make build
 
 # Don't forget to change vimrc/nvim config to:
-# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
+# Plug '~/repos/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
-`make -C dist test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
+`make test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
 
 I have found that when working live in WhatsApp, the best flow is:
 

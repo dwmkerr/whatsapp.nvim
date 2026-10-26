@@ -27,7 +27,7 @@ The plugin lives in the `dist/` directory of the repo, so point your plugin mana
 vim-plug:
 
 ```vim
-Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make -C dist' }
+Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 ```
 
 lazy.nvim:
@@ -35,7 +35,7 @@ lazy.nvim:
 ```lua
 {
   "dwmkerr/whatsapp.nvim",
-  build = "make -C dist",
+  build = "make build",
   config = function()
     vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/whatsapp.nvim/nvim")
     require("whatsapp").setup()
@@ -51,6 +51,8 @@ Then pair once:
 
 Scan the QR code from your phone: WhatsApp > Settings > Linked Devices > Link a Device. History syncs in the background.
 
+If the splash shows "read marks out of sync", open WhatsApp on your phone. On some accounts WhatsApp's server copy of read marks, pins and mutes cannot be verified, and only the phone can send a good copy. It answers while the app is open. Pairing again does not help.
+
 ## Use
 
 While a chat is open and the terminal has focus the device is marked online, so WhatsApp sends typing notifications and contacts can see you as online, just like the phone with a chat on screen. The indicator shows as a bubble under the last message.
@@ -64,6 +66,7 @@ While a chat is open and the terminal has focus the device is marked online, so 
 | `:WhatsApp logout` | Unlink this device from your phone and forget the local session |
 | `:WhatsApp status` | Bridge status |
 | `:WhatsApp stop` | Close and kill the bridge |
+| `:WhatsApp names` | Swap bare phone numbers for contact names; runs by itself on connect, rarely needed |
 
 Chat list (left):
 
@@ -72,8 +75,8 @@ Chat list (left):
 | `<CR>` `l` | Open chat |
 | `i` | Open chat and start composing |
 | `u` | Jump to next unread chat |
+| `f` | Cycle the filter: all / unread / groups |
 | `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
-| `R` | Refresh |
 | `gx` `]m` `[m` | Open / next / previous media in the open chat |
 | `K` `L` | Older messages / toggle layout in the open chat |
 | `<Tab>` `<S-Tab>` | Cycle panes |
@@ -126,6 +129,7 @@ Attachments download without opening an application. Use `gx` to open one, with 
 require("whatsapp").setup({
   store = vim.fn.stdpath("data") .. "/whatsapp", -- session and message databases
   list_width = 32,
+  unread_count = false,     -- show how many messages are unread, left of the time
   compose_height = 3,
   page_size = 100,          -- messages per page
   notify = true,            -- vim.notify for messages in chats you are not viewing
@@ -156,7 +160,7 @@ One JSON object per line. Requests carry an `id` and `method`; responses echo th
 
 Methods: `status`, `pair.start`, `logout`, `chats.list`, `messages.list {jid, limit, before}`, `message.send {jid, text, reply_to}`, `message.react {jid, id, emoji}`, `chat.read {jid}`, `chat.unread {jid}`, `presence {available}`, `media.download {jid, id}`, `contacts.search {query}`.
 
-Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `typing {chat, sender, sender_name, state, media}`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `fatal`.
+Events: `ready`, `unpaired`, `connected`, `disconnected`, `logged_out`, `pair.qr {lines}`, `pair.ok`, `pair.timeout`, `pair.error`, `typing {chat, sender, sender_name, state, media}`, `message {chat_name, message}`, `chats.changed`, `sync.progress`, `sync.done`, `appstate.waiting {name}`, `appstate.synced {name}`, `fatal`.
 
 ## Privacy
 

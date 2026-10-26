@@ -102,3 +102,55 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+func TestReadUpToLowersButNeverRaises(t *testing.T) {
+	s := newTestStore(t)
+	const jid = "a@s.whatsapp.net"
+	must(t, s.UpsertChat(jid, "Alice", false, 300))
+	for i, ts := range []int64{100, 200, 300} {
+		_, err := s.InsertMessage(Message{ID: string(rune('1' + i)), ChatJID: jid, TS: ts})
+		must(t, err)
+	}
+	must(t, s.SetUnread(jid, 3))
+
+	must(t, s.ReadUpTo(jid, 200))
+	if c, _ := s.GetChat(jid); c.Unread != 1 {
+		t.Fatalf("want 1 unread after reading up to 200, got %d", c.Unread)
+	}
+	must(t, s.ReadUpTo(jid, 0))
+	if c, _ := s.GetChat(jid); c.Unread != 1 {
+		t.Fatalf("an older receipt raised the count to %d", c.Unread)
+	}
+	must(t, s.ReadUpTo(jid, 300))
+	if c, _ := s.GetChat(jid); c.Unread != 0 {
+		t.Fatalf("want 0 unread after reading everything, got %d", c.Unread)
+	}
+}
+
+func TestCapUnreadAtOwnReply(t *testing.T) {
+	s := newTestStore(t)
+	const replied, silent = "a@s.whatsapp.net", "b@s.whatsapp.net"
+	must(t, s.UpsertChat(replied, "Alice", false, 300))
+	must(t, s.UpsertChat(silent, "Bob", false, 300))
+	msgs := []Message{
+		{ID: "1", ChatJID: replied, TS: 100},
+		{ID: "2", ChatJID: replied, TS: 200, FromMe: true},
+		{ID: "3", ChatJID: replied, TS: 300},
+		{ID: "4", ChatJID: silent, TS: 300},
+	}
+	for _, m := range msgs {
+		_, err := s.InsertMessage(m)
+		must(t, err)
+	}
+	must(t, s.SetUnread(replied, 19))
+	must(t, s.SetUnread(silent, 5))
+
+	must(t, s.CapUnreadAtOwnReply())
+	if c, _ := s.GetChat(replied); c.Unread != 1 {
+		t.Fatalf("want 1 unread after the reply, got %d", c.Unread)
+	}
+	// Nothing sent from this account, so nothing says the count is wrong.
+	if c, _ := s.GetChat(silent); c.Unread != 5 {
+		t.Fatalf("chat without a reply changed to %d", c.Unread)
+	}
+}

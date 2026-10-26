@@ -16,6 +16,7 @@ local defaults = {
   bin = nil, -- defaults to <plugin>/bin/wa-bridge
   store = vim.fn.stdpath("data") .. "/whatsapp",
   list_width = 32,
+  unread_count = false, -- show how many messages are unread, left of the time
   compose_height = 3,
   page_size = 100,
   notify = true,
@@ -36,6 +37,7 @@ local function define_highlights()
     vim.api.nvim_set_hl(0, name, opts)
   end
   hl("WhatsAppUnread", { bold = true })
+  hl("WhatsAppFilter", { bold = true })
   hl("WhatsAppCurrent", { link = "Visual" })
   hl("WhatsAppTime", { link = "Comment" })
   hl("WhatsAppSender", { link = "Identifier" })
@@ -127,6 +129,8 @@ local function wire_events()
   client.clear_listeners()
   client.on("ready", function(data)
     S.status = data
+    S.fatal = nil
+    S.replaced = false
     chat.render()
   end)
   client.on("unpaired", function()
@@ -136,13 +140,18 @@ local function wire_events()
   end)
   client.on("connected", function()
     S.status.connected = true
+    S.replaced = false
     chat.render()
     M.refresh_chats()
     -- Contacts may have synced after history on a previous run.
     client.request("names.refresh", nil, function() end)
   end)
-  client.on("disconnected", function()
+  client.on("disconnected", function(d)
     S.status.connected = false
+    if d and d.reason == "replaced" then
+      S.replaced = true
+      notify("another client took over this session, run :WhatsApp stop then :WhatsApp", vim.log.levels.WARN)
+    end
     chat.render()
   end)
   client.on("logged_out", function(d)
@@ -196,6 +205,22 @@ local function wire_events()
     end
     chat.render()
   end)
+  -- A collection waiting on the phone stops syncing until the phone answers,
+  -- and nothing here can cure it, so say so rather than fail quietly.
+  client.on("appstate.waiting", function(d)
+    if not S.out_of_sync[d.name] then
+      S.out_of_sync[d.name] = true
+      notify(S.out_of_sync_label(d.name) .. " are out of sync, open WhatsApp on your phone to repair them", vim.log.levels.WARN)
+    end
+    chat.render()
+  end)
+  client.on("appstate.synced", function(d)
+    if S.out_of_sync[d.name] then
+      S.out_of_sync[d.name] = nil
+      notify(S.out_of_sync_label(d.name) .. " back in sync")
+    end
+    chat.render()
+  end)
   client.on("chats.changed", function()
     M.refresh_chats()
   end)
@@ -232,10 +257,12 @@ local function wire_events()
     M.refresh_chats()
   end)
   client.on("fatal", function(d)
-    notify("bridge failed: " .. d.error, vim.log.levels.ERROR)
+    S.fatal = d.error
+    notify(d.error, vim.log.levels.ERROR)
   end)
   client.on("exit", function(d)
-    if d.code ~= 0 then
+    -- A refused start already explained itself through "fatal".
+    if d.code ~= 0 and not S.fatal then
       notify("bridge exited with code " .. d.code .. "\n" .. table.concat(d.stderr, "\n"), vim.log.levels.ERROR)
     end
     chat.render()
@@ -338,10 +365,19 @@ function M.refresh_chats()
   end)
 end
 
+-- Help is a flag the chat pane renders over everything else, so any action
+-- that gives the pane new content has to drop it first. Focus stays put:
+-- the caller decides where the user ends up.
+local function dismiss_help()
+  S.help = false
+  S.help_return = nil
+end
+
 function M.open_chat(jid)
   if not jid then
     return
   end
+  dismiss_help()
   S.view = nil
   if S.current ~= jid then
     stop_typing()
@@ -447,7 +483,9 @@ function M.send_compose(jid)
     if S.messages[sent.chat_jid] then
       table.insert(S.messages[sent.chat_jid], sent)
     end
-    chat.render()
+    -- Replying moves the cursor up to the quoted message, so following only
+    -- from the bottom would leave the sent message out of view.
+    chat.render({ bottom = S.current == jid })
     M.refresh_chats()
   end)
 end
@@ -758,6 +796,7 @@ function M.open()
     -- Fresh bridge, fresh status: a stale "connected" would skip the
     -- connecting splash.
     S.status = { paired = nil, connected = false }
+    S.out_of_sync = {}
     S.synced = false
     S.sync = nil
     if not client.start(S.opts.bin, S.opts.store) then
@@ -781,8 +820,7 @@ function M.toggle()
 end
 
 function M.close()
-  S.help = false
-  S.help_return = nil
+  dismiss_help()
   S.view = nil
   require("whatsapp.ui.images").reset()
   stop_typing()
@@ -807,6 +845,7 @@ function M.pair()
   if not client.running() then
     return
   end
+  dismiss_help()
   S.pairing = true
   chat.render()
   client.request("pair.start", nil, function(err)

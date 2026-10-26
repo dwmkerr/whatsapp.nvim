@@ -222,8 +222,8 @@ local function splash(width, height)
     rows[#rows + 1] = { key = k, text = text }
   end
   if not client.running() then
-    note("bridge not running")
-    key(":WhatsApp", "restarts it")
+    note(S.fatal or "bridge not running")
+    key(":WhatsApp", S.fatal and "tries again" or "restarts it")
   elseif S.qr then
     note("scan with WhatsApp > Linked Devices > Link a Device")
     if height < #S.qr + 4 or width < vim.fn.strdisplaywidth(S.qr[1]) then
@@ -243,6 +243,9 @@ local function splash(width, height)
     key(":WhatsApp pair", "links this device")
     rows[#rows + 1] = {}
     note("then scan the code with WhatsApp > Linked Devices")
+  elseif S.replaced then
+    note("another client took over this session")
+    key(":WhatsApp stop", "then :WhatsApp reconnects")
   elseif not S.status.connected then
     note("connecting…")
   elseif S.sync and not S.synced then
@@ -263,6 +266,10 @@ local function splash(width, height)
     key("q", "close")
     rows[#rows + 1] = {}
     note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
+    local stale = S.out_of_sync_label()
+    if stale then
+      rows[#rows + 1] = { text = stale .. " out of sync · open WhatsApp on your phone", hl = "WarningMsg" }
+    end
   end
 
   local keyw = 0
@@ -294,8 +301,9 @@ local function splash(width, height)
 end
 
 -- Re-render the current conversation. Keeps the view pinned to the bottom
--- unless the user has scrolled up to read history.
-function M.render()
+-- unless the user has scrolled up to read history. opts.bottom forces the
+-- jump, for a message the user has just sent.
+function M.render(opts)
   local buf = M.ensure_buf()
   local msgs = S.current and S.messages[S.current] or {}
   local chat = S.current and S.chat_by_jid[S.current]
@@ -372,7 +380,7 @@ function M.render()
   -- newly opened chat always starts at its latest message.
   local follow = true
   local old_count = vim.api.nvim_buf_line_count(buf)
-  if S.win_valid("chat") and S.current == rendered_jid then
+  if S.win_valid("chat") and S.current == rendered_jid and not (opts and opts.bottom) then
     local row = vim.api.nvim_win_get_cursor(S.wins.chat)[1]
     follow = row >= old_count - 1
   end

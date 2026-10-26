@@ -24,6 +24,13 @@ return function()
     { jid = "b", name = "Bob", last_ts = 0, unread = 0 },
   }, 20)
   check(vim.startswith(lines[1], "●") and unread[1] and jids[2] == "b", "chat_list marks unread and maps jids")
+  check(lines[1]:match(" 3 ") == nil, "chat_list hides counts by default")
+  local counted = format.chat_list({
+    { jid = "a", name = "Alice", last_ts = 0, unread = 3 },
+    { jid = "b", name = "Bob", last_ts = 0, unread = 0 },
+  }, 20, true)
+  check(counted[1]:match(" 3 $") ~= nil and vim.fn.strdisplaywidth(counted[1]) == 20, "chat_list shows the count left of the time")
+  check(counted[2] == lines[2], "chat_list leaves read chats unchanged with counts on")
 
   local clines, owners, spans = format.conversation({
     { id = "1", text = "hi\nthere", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },
@@ -105,9 +112,53 @@ return function()
   check(not S.win_valid("compose"), "compose hidden until a chat opens")
   local splash = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(splash:find("WhatsApp", 1, true) ~= nil and splash:find("next unread", 1, true) ~= nil, "splash shows keys")
+  local function splash_has(s)
+    return table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n"):find(s, 1, true) ~= nil
+  end
+  check(not splash_has("out of sync"), "splash quiet while read marks sync")
+  events["appstate.waiting"]({ name = "regular_low" })
+  check(splash_has("read marks out of sync · open WhatsApp on your phone"), "splash says read marks wait on the phone")
+  events["appstate.synced"]({ name = "regular_low" })
+  check(not splash_has("out of sync"), "splash clears once the phone's copy arrives")
+  events["appstate.waiting"]({ name = "regular_high" })
+  check(splash_has("chat settings out of sync"), "other collections are not called read marks")
+  events["appstate.synced"]({ name = "regular_high" })
 
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
-  check(#list_lines == 2 and list_lines[1]:find("Alice", 1, true) ~= nil, "list buffer shows Alice first")
+  check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
+  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
+  check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
+
+  -- f cycles the filter under the title; <CR> on the filter line does too.
+  local list = require("whatsapp.ui.list")
+  list.cycle_filter()
+  list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(S.filter == "unread" and #list_lines == 2 and list_lines[2]:find("Alice", 1, true) ~= nil, "unread filter keeps only unread chats")
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cycling the filter parks the cursor on the first chat")
+  list.cycle_filter()
+  list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(S.filter == "groups" and #list_lines == 2 and list_lines[2]:find("Climbing", 1, true) ~= nil, "groups filter keeps only groups")
+  check(list.jid_under_cursor() == "222@g.us", "jid under cursor accounts for the filter line")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
+  check(list.jid_under_cursor() == nil, "filter line has no chat")
+  vim.api.nvim_set_current_win(S.wins.list)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+  check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all")
+  S.filter = "groups"
+  list.render()
+  check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("Climbing", 1, true) ~= nil, "render honours a preset filter")
+  S.filter = "unread"
+  S.chat_by_jid["111@s.whatsapp.net"].unread = 0
+  list.render()
+  check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no unread chats", 1, true) ~= nil, "empty filter says so")
+  S.chat_by_jid["111@s.whatsapp.net"].unread = 2
+  S.filter = "all"
+  list.render()
+  vim.api.nvim_win_set_cursor(S.wins.list, { 3, 0 })
+  list.next_unread()
+  check(S.current == "111@s.whatsapp.net" and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "u wraps to the unread chat past the filter line")
+  S.current = nil
 
   wa.open_chat("111@s.whatsapp.net")
   check(wait_for(function() return S.messages["111@s.whatsapp.net"] ~= nil end), "messages loaded")
@@ -150,6 +201,18 @@ return function()
     return l:find("me: from nvim", 1, true) ~= nil
   end), ":w sends and echoes into the chat")
   check(vim.api.nvim_buf_get_lines(S.bufs.compose, 0, -1, false)[1] == "", "compose cleared after send")
+
+  -- Replying means moving the cursor up to the quoted message; the sent
+  -- message must still come into view, as on the phone.
+  vim.api.nvim_win_set_cursor(S.wins.chat, { 1, 0 })
+  vim.api.nvim_buf_set_lines(S.bufs.compose, 0, -1, false, { "after scrolling up" })
+  vim.cmd("write")
+  check(wait_for(function()
+    local l = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+    return l:find("after scrolling up", 1, true) ~= nil
+  end), "second send echoes into the chat")
+  check(vim.api.nvim_win_get_cursor(S.wins.chat)[1] == vim.api.nvim_buf_line_count(S.bufs.chat),
+    "sending scrolls to the sent message even when the view was scrolled up")
 
   -- Media hint sits on the target attachment: under the cursor, else the
   -- newest one. ]m / [m move between attachments.
@@ -330,6 +393,13 @@ return function()
   local back_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(not S.help and vim.api.nvim_get_current_win() == S.wins.list, "closing help returns focus to the list")
   check(back_text:find("hello", 1, true) ~= nil, "closing help restores the conversation")
+  -- Opening a chat while help is up dismisses it; the conversation wins.
+  wa.toggle_help()
+  vim.api.nvim_set_current_win(S.wins.list)
+  wa.open_chat("111@s.whatsapp.net")
+  local opened_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(not S.help and S.help_return == nil, "opening a chat clears the help flag")
+  check(opened_text:find("hello", 1, true) ~= nil and opened_text:find("WhatsApp keys", 1, true) == nil, "opening a chat replaces help with the conversation")
   vim.api.nvim_set_current_win(S.wins.chat)
 
   -- Typing indicator: rows under the last message for the open chat only,
@@ -353,7 +423,7 @@ return function()
   S.chat_by_jid["111@s.whatsapp.net"].unread = 0
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.current == nil and S.chat_by_jid["111@s.whatsapp.net"].unread == 1, "toggle_unread flags and closes the open chat")
-  check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 0, 1, false)[1], "●"), "list shows the unread mark")
+  check(vim.startswith(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1], "●"), "list shows the unread mark")
   wa.toggle_unread("111@s.whatsapp.net")
   check(S.chat_by_jid["111@s.whatsapp.net"].unread == 0, "toggle_unread clears again")
   wa.set_unread("111@s.whatsapp.net", true)
@@ -364,6 +434,27 @@ return function()
   check(vim.api.nvim_get_current_win() == S.wins.chat, "Tab moves list to chat")
   wa.focus_next(-1)
   check(vim.api.nvim_get_current_win() == S.wins.list, "S-Tab moves back")
+
+  -- A second bridge on the same store is refused: one message, not a
+  -- "bridge failed" plus a "bridge exited" pair.
+  local notes, real_notify = {}, vim.notify
+  vim.notify = function(msg) notes[#notes + 1] = msg end
+  events["fatal"]({ error = "WhatsApp client already connected on pid 42" })
+  events["exit"]({ code = 1, stderr = {} })
+  check(#notes == 1 and notes[1]:find("pid 42", 1, true) ~= nil, "refused start notifies once with the holder pid")
+  check(S.fatal ~= nil, "refused start is remembered for the splash")
+  events["ready"]({ paired = true, connected = false })
+  check(S.fatal == nil, "ready clears the refusal")
+
+  -- Another client taking the session is a disconnect the bridge reports;
+  -- the editor must stop claiming it is connected.
+  notes = {}
+  events["disconnected"]({ reason = "replaced" })
+  check(S.status.connected == false and S.replaced, "replaced session shows as disconnected")
+  check(#notes == 1 and notes[1]:find("another client", 1, true) ~= nil, "replaced session warns once")
+  events["connected"]()
+  check(S.status.connected and not S.replaced, "reconnect clears the takeover")
+  vim.notify = real_notify
 
   require("test.security")(check, events)
 
