@@ -1,0 +1,149 @@
+{
+  "me": { "phone": "447700900000", "name": "Sam" },
+  "contacts": [
+    { "jid": "447700900101@s.whatsapp.net", "name": "Ada Fenwick" },
+    { "jid": "447700900102@s.whatsapp.net", "name": "Bram Okafor" },
+    { "jid": "447700900103@s.whatsapp.net", "name": "Cleo Marsh" },
+    { "jid": "447700900104@s.whatsapp.net", "name": "Dev Patel-Ruiz" },
+    { "jid": "447700900105@s.whatsapp.net", "name": "Elin Ward" },
+    { "jid": "447700900106@s.whatsapp.net", "name": "Fitz Horne" },
+    { "jid": "447700900107@s.whatsapp.net", "name": "Gus Albright" }
+  ],
+  "groups": [
+    { "jid": "120363400000000001@g.us", "name": "Boulder Wednesdays" },
+    { "jid": "120363400000000002@g.us", "name": "Five-a-side Fridays" },
+    { "jid": "120363400000000003@g.us", "name": "Allotment Society" },
+    { "jid": "120363400000000004@g.us", "name": "Book Club" }
+  ],
+  "events": [
+    {
+      "type": "history",
+      "note": "First history chunk after pairing: everyday chats with unread counts from the phone.",
+      "progress": 35,
+      "delay_ms": 600,
+      "conversations": [
+        {
+          "jid": "447700900101@s.whatsapp.net",
+          "unread": 2,
+          "messages": [
+            { "id": "ADA01", "from": "me", "text": "Are we still on for Saturday?", "at": "-27h" },
+            { "id": "ADA02", "text": "Yes! Meet at the café at 10", "at": "-26h30m" },
+            { "id": "ADA03", "text": "Bring the rope, mine is retired", "reply_to": "ADA01", "at": "-26h" }
+          ]
+        },
+        {
+          "jid": "120363400000000001@g.us",
+          "name": "Boulder Wednesdays",
+          "unread": 3,
+          "messages": [
+            { "id": "BW01", "from": "447700900102@s.whatsapp.net", "text": "Wall reset this week, new blues in the cave", "at": "-30h" },
+            { "id": "BW02", "from": "447700900103@s.whatsapp.net", "media": "image", "caption": "The new overhang", "at": "-29h" },
+            { "id": "BW03", "from": "me", "text": "I'm in, 7pm?", "at": "-28h" },
+            { "id": "BW04", "from": "447700900104@s.whatsapp.net", "text": "7 works", "at": "-3h" },
+            { "id": "BW05", "from": "447700900102@s.whatsapp.net", "media": "voice", "at": "-2h50m" },
+            { "id": "BW06", "from": "447700900103@s.whatsapp.net", "text": "Bring chalk, the shop is out", "at": "-2h40m" }
+          ]
+        },
+        {
+          "jid": "447700900105@s.whatsapp.net",
+          "messages": [
+            { "id": "ELIN01", "text": "Sent you the train times", "at": "-50h" },
+            { "id": "ELIN02", "text": "", "media": "document", "filename": "timetable.pdf", "at": "-50h" },
+            { "id": "ELIN03", "from": "me", "text": "Perfect, thank you", "at": "-49h" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "history",
+      "note": "The phone archived these groups. They should sit under Archived, out of the list and the unread count. Drift seen on a real account: archived chats showed at the top with large unread counts.",
+      "progress": 70,
+      "delay_ms": 600,
+      "conversations": [
+        {
+          "jid": "120363400000000002@g.us",
+          "name": "Five-a-side Fridays",
+          "unread": 39,
+          "archived": true,
+          "messages": [
+            { "id": "FAS01", "from": "447700900106@s.whatsapp.net", "text": "Who's in this week?", "at": "-6h" },
+            { "id": "FAS02", "from": "447700900107@s.whatsapp.net", "text": "In", "at": "-5h" },
+            { "id": "FAS03", "from": "447700900106@s.whatsapp.net", "text": "Need two more", "at": "-1h" }
+          ]
+        },
+        {
+          "jid": "120363400000000003@g.us",
+          "name": "Allotment Society",
+          "unread": 12,
+          "archived": true,
+          "messages": [
+            { "id": "ALS01", "from": "447700900107@s.whatsapp.net", "text": "Water butts are being delivered Thursday", "at": "-20h" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "history",
+      "note": "Last history chunk: chats with nothing unread, and one marked unread by hand on the phone.",
+      "progress": 100,
+      "delay_ms": 600,
+      "conversations": [
+        {
+          "jid": "447700900102@s.whatsapp.net",
+          "marked_unread": true,
+          "messages": [
+            { "id": "BRAM01", "text": "Job interview went well, they offered January", "at": "-9h" }
+          ]
+        },
+        {
+          "jid": "120363400000000004@g.us",
+          "name": "Book Club",
+          "messages": [
+            { "id": "BC01", "from": "447700900103@s.whatsapp.net", "text": "Next pick: anything under 300 pages please", "at": "-75h" },
+            { "id": "BC02", "from": "me", "text": "Seconded", "at": "-74h" }
+          ]
+        },
+        {
+          "jid": "447700900103@s.whatsapp.net",
+          "messages": [
+            { "id": "CLEO01", "from": "me", "text": "Happy birthday!", "at": "-100h" },
+            { "id": "CLEO02", "text": "Thank you 🎉", "at": "-99h" },
+            { "id": "CLEO03", "media": "sticker", "at": "-99h" }
+          ]
+        },
+        {
+          "jid": "447700900104@s.whatsapp.net",
+          "messages": [
+            { "id": "DEV01", "text": "Can you look at my bike this weekend?", "at": "-14h" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mark_read",
+      "note": "Marked unread on the phone, delivered by an app state full sync (recovery) rather than a live patch. Suspected cause of marked-unread chats showing as read; not yet confirmed against a real log.",
+      "chat": "447700900104@s.whatsapp.net",
+      "read": false,
+      "full_sync": true,
+      "at": "-13h"
+    },
+    {
+      "type": "offline_preview",
+      "note": "Messages that arrived while the bridge was offline, replayed one by one.",
+      "messages": 4,
+      "delay_ms": 400
+    },
+    { "type": "message", "chat": "447700900101@s.whatsapp.net", "id": "ADA04", "text": "Also, the café opens at 9 now", "at": "-40m", "delay_ms": 400 },
+    { "type": "message", "chat": "120363400000000001@g.us", "id": "BW07", "from": "447700900104@s.whatsapp.net", "text": "Running 10 late", "at": "-30m", "delay_ms": 400 },
+    { "type": "message", "chat": "120363400000000002@g.us", "id": "FAS04", "from": "447700900107@s.whatsapp.net", "text": "Found two more, we're on", "at": "-20m", "delay_ms": 400 },
+    { "type": "message", "chat": "447700900106@s.whatsapp.net", "id": "FITZ01", "text": "Hey Sam, are you around later?", "push_name": "Fitz", "at": "-10m", "delay_ms": 400 },
+    { "type": "offline_done", "messages": 4 },
+    {
+      "type": "read_receipt",
+      "note": "Ada's chat read on the phone after the bridge connected.",
+      "chat": "447700900101@s.whatsapp.net",
+      "ids": ["ADA04"],
+      "delay_ms": 1500
+    }
+  ]
+}

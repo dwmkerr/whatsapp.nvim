@@ -12,6 +12,13 @@ build: # Build the Go bridge into dist/bin/wa-bridge.
 dev: build # Build the bridge, then open Neovim with WhatsApp.
 	nvim +WhatsApp
 
+# The checkout goes first on the runtimepath so it wins over an installed
+# copy, and works when the user's config does not install the plugin at all.
+FIXTURE ?= $(CURDIR)/dist/test/fixtures/synthetic.json
+.PHONY: demo
+demo: build # Open the plugin from this checkout against a synthetic account (FIXTURE=path).
+	WHATSAPP_FIXTURE=$(FIXTURE) nvim --clean -u $(CURDIR)/dist/test/demo.lua +WhatsApp
+
 .PHONY: test
 test: # Run the Go and Lua test suites.
 	$(MAKE) -C dist test
