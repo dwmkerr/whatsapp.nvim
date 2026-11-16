@@ -381,12 +381,13 @@ func (w *WA) useFixture(ctx context.Context, fx *fixture) error {
 }
 
 // replay sends the timeline through handleEvent in order, as the servers
-// would after connecting. With pace false the delays are skipped, for tests.
-func (w *WA) replay(fx *fixture, pace bool) {
+// would after connecting. A pace of 0 skips the delays, for tests; recordings
+// raise it so slow screen captures still catch states that pass in a second.
+func (w *WA) replay(fx *fixture, pace float64) {
 	w.handleEvent(&events.Connected{})
 	for i, e := range fx.Events {
-		if pace && e.DelayMS > 0 {
-			time.Sleep(time.Duration(e.DelayMS) * time.Millisecond)
+		if pace > 0 && e.DelayMS > 0 {
+			time.Sleep(time.Duration(float64(e.DelayMS)*pace) * time.Millisecond)
 		}
 		evt, err := fx.build(e, i)
 		if err != nil {

@@ -27,7 +27,7 @@ func replayFixture(t *testing.T, path string) (*WA, *bytes.Buffer) {
 	if err := w.useFixture(context.Background(), fx); err != nil {
 		t.Fatal(err)
 	}
-	w.replay(fx, false)
+	w.replay(fx, 0)
 	return w, &out
 }
 

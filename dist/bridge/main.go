@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -91,7 +92,7 @@ func main() {
 
 	out.Emit("ready", wa.Status())
 	if fx != nil {
-		go wa.replay(fx, true)
+		go wa.replay(fx, fixturePace())
 	} else if err := wa.Connect(ctx); err != nil {
 		out.Emit("error", map[string]string{"error": err.Error()})
 	}
@@ -216,4 +217,13 @@ func params(req Request, v interface{}) error {
 		return errors.New("missing params")
 	}
 	return json.Unmarshal(req.Params, v)
+}
+
+// fixturePace reads the delay multiplier from the environment rather than a
+// flag, so make demo reaches the bridge without the plugin passing it through.
+func fixturePace() float64 {
+	if p, err := strconv.ParseFloat(os.Getenv("WHATSAPP_FIXTURE_PACE"), 64); err == nil && p > 0 {
+		return p
+	}
+	return 1
 }
