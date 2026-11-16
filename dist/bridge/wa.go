@@ -201,6 +201,12 @@ func (w *WA) handleEvent(evt interface{}) {
 		for _, name := range w.appStateWaiting() {
 			w.requestAppStateRecovery(name)
 		}
+		// Cleared here rather than after the fetch, so a reconnect while
+		// it runs does not start a second one.
+		if w.store.ArchiveUnknown && !w.fixture {
+			w.store.ArchiveUnknown = false
+			go w.learnArchive()
+		}
 	case *events.AppStateSyncError:
 		w.resyncAppState(v)
 	case *events.Disconnected:
@@ -266,6 +272,13 @@ func (w *WA) handleEvent(evt interface{}) {
 		} else {
 			_ = w.store.SetUnread(jid, 1)
 		}
+		w.out.Emit("chats.changed", nil)
+	case *events.Archive:
+		// Unlike read marks, a full sync is the useful case here: it is a
+		// snapshot of which chats are archived now, and history sync only
+		// covers the chats it sends.
+		chat := w.canonical(context.Background(), v.JID, types.EmptyJID).String()
+		_ = w.store.SetArchived(chat, v.Action.GetArchived())
 		w.out.Emit("chats.changed", nil)
 	case *events.Contact:
 		jid := v.JID.ToNonAD().String()
@@ -446,6 +459,9 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 			}
 			w.handleMessage(parsed, false)
 			count++
+		}
+		if conv.GetArchived() {
+			_ = w.store.SetArchived(w.canonical(context.Background(), jid, types.EmptyJID).String(), true)
 		}
 		// The phone's unread state only arrives with the sync; without it
 		// every chat looks read until a new message lands.
@@ -987,4 +1003,13 @@ func (o *offlineProgress) step() (int, bool) {
 	}
 	o.last = p
 	return p, true
+}
+
+// learnArchive fetches the archive snapshot once for a store that predates
+// the archived column, so upgrading does not leave archived chats in the
+// list until the next re-pair. Archive actions live in regular_low.
+func (w *WA) learnArchive() {
+	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {
+		w.log.Warnf("fetch archived chats: %v", err)
+	}
 }
