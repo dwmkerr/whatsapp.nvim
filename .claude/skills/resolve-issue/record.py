@@ -134,7 +134,7 @@ def main():
         # COLORTERM stops Neovim asking about truecolor; NVIM_TEST hides the
         # warning about the unanswered background query.
         client.call("shell_send", session_id=sid,
-                    input=f"COLORTERM=truecolor NVIM_TEST=1 make -s demo FIXTURE={fixture}\n", delay_ms=200)
+                    input=f"COLORTERM=truecolor NVIM_TEST=1 make -s demo FIXTURE={fixture} PACE={script.get('pace', 1)}\n", delay_ms=200)
         for step in script["steps"]:
             if "keys" in step:
                 client.call("shell_send", session_id=sid, input=step["keys"], delay_ms=step.get("wait", 500))
