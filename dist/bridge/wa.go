@@ -254,17 +254,19 @@ func (w *WA) handleEvent(evt interface{}) {
 		// stored under bare phone numbers.
 		w.RefreshNames(context.Background())
 	case *events.MarkChatAsRead:
-		// Toggled from the phone or another linked device. The full sync
-		// after pairing replays every historical toggle; the history sync
-		// already carries the real unread counts, so those are ignored.
-		if v.FromFullSync {
+		// Toggled from the phone or another linked device. A full sync is a
+		// snapshot of the latest mark per chat, sent after pairing and when
+		// app state is recovered. Its "read" can be days old, with messages
+		// since that the history sync counted, so only its "unread" applies.
+		read := v.Action.GetRead()
+		if v.FromFullSync && read {
 			return
 		}
 		jid := v.JID.ToNonAD().String()
-		if v.Action.GetRead() {
+		if read {
 			_ = w.store.ClearUnread(jid)
 		} else {
-			_ = w.store.SetUnread(jid, 1)
+			_ = w.store.MarkUnread(jid)
 		}
 		w.out.Emit("chats.changed", nil)
 	case *events.Contact:
