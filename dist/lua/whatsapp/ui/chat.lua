@@ -249,7 +249,8 @@ local function splash(width, height)
   elseif not S.status.connected then
     note("connecting…")
   elseif S.sync and not S.synced then
-    note("syncing history · " .. (S.sync.chats or 0) .. " chats")
+    local p = S.sync_percent()
+    note("syncing history" .. (p and (" · " .. p .. "%") or ""))
   else
     local unread = 0
     for _, c in ipairs(S.chats) do
@@ -400,7 +401,8 @@ function M.render(opts)
   -- the tag's indent in the lines layout. Either way above the hint.
   images.clear(buf)
   for _, e in ipairs(media_rows) do
-    if e.m.media_type == "image" then
+    images.auto_download(e.m)
+    if images.drawable(e.m) then
       if S.opts.layout == "bubbles" then
         local footer = lines[e.last] or ""
         local indent = footer:match("^%s*")

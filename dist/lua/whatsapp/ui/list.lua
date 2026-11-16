@@ -23,7 +23,9 @@ end
 
 local function keep_chat(c)
   if S.filter == "unread" then
-    return c.unread > 0
+    -- Opening a chat reads it. Keep the open one listed, as the phone does,
+    -- so the row just picked does not vanish from under the cursor.
+    return c.unread > 0 or c.jid == S.current
   elseif S.filter == "groups" then
     return c.is_group == true
   end
@@ -107,6 +109,30 @@ function M.jid_under_cursor()
   return line_jids[row] or nil
 end
 
+-- The winbar alone, so sync progress can tick without redrawing the rows.
+function M.update_bar()
+  if not S.win_valid("list") then
+    return
+  end
+  local bar = " WhatsApp"
+  local p = S.sync_percent()
+  if p then
+    -- The winbar is a statusline format, where a bare % starts an item.
+    bar = bar .. " · syncing " .. p .. "%%"
+  else
+    local n = 0
+    for _, c in ipairs(S.chats) do
+      if c.unread > 0 then
+        n = n + 1
+      end
+    end
+    if n > 0 then
+      bar = bar .. " · " .. n .. " unread"
+    end
+  end
+  vim.wo[S.wins.list].winbar = bar .. " · g? help"
+end
+
 function M.render()
   local buf = M.ensure_buf()
   local width = S.text_width("list", S.opts.list_width)
@@ -133,21 +159,11 @@ function M.render()
     lines[2] = "  " .. filters[filter_index()].empty
   end
 
-  if S.win_valid("list") then
-    local n = 0
-    for _, c in ipairs(S.chats) do
-      if c.unread > 0 then
-        n = n + 1
-      end
-    end
-    local bar = " WhatsApp"
-    if n > 0 then
-      bar = bar .. " · " .. n .. " unread"
-    end
-    vim.wo[S.wins.list].winbar = bar .. " · g? help"
-  end
-  line_jids = jids
+  M.update_bar()
+  -- Read the cursor's chat before line_jids changes; afterwards the same row
+  -- names whichever chat moved into it.
   local keep = M.jid_under_cursor() or S.current
+  line_jids = jids
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)

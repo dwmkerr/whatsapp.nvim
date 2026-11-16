@@ -27,6 +27,16 @@ local M = {
   out_of_sync = {},  -- app state collections waiting on the phone's copy, name -> true
 }
 
+-- Percent done while the bridge replays missed messages or loads history,
+-- nil when nothing is syncing or the bridge cannot say how far it is.
+function M.sync_percent()
+  local p = M.sync and M.sync.percent
+  if p and p < 100 then
+    return p
+  end
+  return nil
+end
+
 -- Columns available for text in a window, after number/sign columns the
 -- user's config may force on.
 function M.text_width(name, fallback)

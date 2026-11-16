@@ -35,6 +35,7 @@ type WA struct {
 	pairing       sync.Mutex
 	names         sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone      bool
+	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
 	appStateMu    sync.Mutex
@@ -217,13 +218,22 @@ func (w *WA) handleEvent(evt interface{}) {
 			"state":       string(v.State),
 			"media":       string(v.Media),
 		})
+	case *events.OfflineSyncPreview:
+		w.offline.start(v.Messages)
+		if v.Messages > 0 {
+			w.out.Emit("sync.progress", map[string]int{"percent": 0})
+		}
 	case *events.Message:
+		if p, ok := w.offline.step(); ok {
+			w.out.Emit("sync.progress", map[string]int{"percent": p})
+		}
 		w.handleMessage(v, true)
 	case *events.HistorySync:
 		w.handleHistorySync(v)
 	case *events.Receipt:
 		w.handleReceipt(v)
 	case *events.OfflineSyncCompleted:
+		w.offline.start(0)
 		w.syncDone = true
 		w.out.Emit("sync.done", map[string]int{"count": v.Count})
 		w.RefreshNames(context.Background())
@@ -442,7 +452,11 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 		}
 	}
 	w.log.Infof("history sync %s: %d conversations, %d messages, %d unread", evt.Data.GetSyncType(), len(evt.Data.GetConversations()), count, unread)
-	w.out.Emit("sync.progress", map[string]int{"messages": count})
+	progress := map[string]int{"messages": count}
+	if p := evt.Data.GetProgress(); p > 0 {
+		progress["percent"] = int(min(p, 100))
+	}
+	w.out.Emit("sync.progress", progress)
 	w.out.Emit("chats.changed", nil)
 }
 
@@ -760,10 +774,29 @@ func (w *WA) ListMessages(jid string, limit int, before int64) ([]Message, error
 	if err != nil {
 		return nil, err
 	}
+	kept := msgs[:0]
 	for i := range msgs {
+		if nowSkipped(&msgs[i]) {
+			continue
+		}
 		w.decorate(&msgs[i])
+		kept = append(kept, msgs[i])
 	}
-	return msgs, nil
+	return kept, nil
+}
+
+// nowSkipped reports a row stored as unsupported whose type extract has
+// since learned to skip, such as album headers saved by older bridges.
+// Hiding them here keeps old stores clean without a migration.
+func nowSkipped(m *Message) bool {
+	if m.Text != unsupportedText || m.raw == nil {
+		return false
+	}
+	var pm waE2E.Message
+	if proto.Unmarshal(m.raw, &pm) != nil {
+		return false
+	}
+	return extract(&pm).Skip
 }
 
 func (w *WA) decorate(m *Message) {
@@ -903,4 +936,37 @@ func (w *WA) requestAppStateRecovery(name appstate.WAPatchName) {
 			w.log.Warnf("app state %s recovery request: %v", name, err)
 		}
 	}()
+}
+
+// offlineProgress turns the replay of messages missed while offline into a
+// percentage. The server announces the count first (OfflineSyncPreview),
+// then sends them one by one.
+type offlineProgress struct {
+	mu          sync.Mutex
+	total, seen int
+	last        int
+}
+
+func (o *offlineProgress) start(total int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.total, o.seen, o.last = total, 0, 0
+}
+
+// step counts one replayed message and returns the new percentage when it
+// moved, so the editor hears at most a hundred updates however long the
+// replay is.
+func (o *offlineProgress) step() (int, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.total <= 0 || o.seen >= o.total {
+		return 0, false
+	}
+	o.seen++
+	p := o.seen * 100 / o.total
+	if p == o.last {
+		return 0, false
+	}
+	o.last = p
+	return p, true
 }

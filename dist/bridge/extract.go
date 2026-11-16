@@ -18,6 +18,8 @@ type extracted struct {
 	Skip      bool  // protocol noise with nothing to show
 }
 
+const unsupportedText = "[unsupported message]"
+
 // extract flattens the many waE2E.Message variants into text plus an
 // optional media tag. Unknown types produce a bracketed placeholder so the
 // chat never silently drops a message.
@@ -72,11 +74,13 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = "[poll] " + m.PollCreationMessage.GetName()
 	case m.PollCreationMessageV3 != nil:
 		e.Text = "[poll] " + m.PollCreationMessageV3.GetName()
+	// An album header only announces the photos that follow as ordinary
+	// image messages; the phone shows the photos, never the header.
 	case m.ReactionMessage != nil, m.ProtocolMessage != nil, m.SenderKeyDistributionMessage != nil,
-		m.PollUpdateMessage != nil, m.DeviceSentMessage != nil:
+		m.PollUpdateMessage != nil, m.DeviceSentMessage != nil, m.AlbumMessage != nil:
 		e.Skip = true
 	default:
-		e.Text = "[unsupported message]"
+		e.Text = unsupportedText
 	}
 	e.Text = strings.TrimRight(e.Text, "\n")
 	return e

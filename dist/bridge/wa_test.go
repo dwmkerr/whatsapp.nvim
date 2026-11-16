@@ -36,3 +36,20 @@ func TestMediaPathStaysUnderRoot(t *testing.T) {
 		t.Fatalf("benign name mangled: %s %v", p, err)
 	}
 }
+
+func TestOfflineProgressReportsEachPercentOnce(t *testing.T) {
+	var o offlineProgress
+	if _, ok := o.step(); ok {
+		t.Fatal("no replay announced, no progress")
+	}
+	o.start(200)
+	var got []int
+	for i := 0; i < 250; i++ {
+		if p, ok := o.step(); ok {
+			got = append(got, p)
+		}
+	}
+	if len(got) != 100 || got[0] != 1 || got[99] != 100 {
+		t.Fatalf("want 1..100 once each, got %d values %v..", len(got), got[:3])
+	}
+}
