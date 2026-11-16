@@ -56,7 +56,7 @@
     },
     {
       "type": "history",
-      "note": "The phone archived these groups. They should sit under Archived, out of the list and the unread count. Drift seen on a real account: archived chats showed at the top with large unread counts.",
+      "note": "#30: the phone archived these groups. They should sit under Archived, out of the list and the unread count.",
       "progress": 70,
       "delay_ms": 600,
       "conversations": [
@@ -121,7 +121,7 @@
     },
     {
       "type": "mark_read",
-      "note": "Marked unread on the phone, delivered by an app state full sync (recovery) rather than a live patch. Suspected cause of marked-unread chats showing as read; not yet confirmed against a real log.",
+      "note": "#29: marked unread on the phone, delivered by an app state full sync (after pairing or a recovery) rather than a live patch. Should show as unread.",
       "chat": "447700900104@s.whatsapp.net",
       "read": false,
       "full_sync": true,
