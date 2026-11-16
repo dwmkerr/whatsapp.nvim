@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "shellwright": {
+      "command": "npx",
+      "args": ["-y", "@dwmkerr/shellwright@0.1.10", "--font-size", "14", "--cols", "110", "--rows", "30", "--temp-dir", "./scratch/shellwright/tmp"]
+    }
+  }
+}
