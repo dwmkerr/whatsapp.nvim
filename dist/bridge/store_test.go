@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -152,5 +153,44 @@ func TestCapUnreadAtOwnReply(t *testing.T) {
 	// Nothing sent from this account, so nothing says the count is wrong.
 	if c, _ := s.GetChat(silent); c.Unread != 5 {
 		t.Fatalf("chat without a reply changed to %d", c.Unread)
+	}
+}
+
+func TestOldStoreGainsArchivedColumnOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite3", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The chats table as bridges before the archived column created it.
+	if _, err := db.Exec(`CREATE TABLE chats (jid TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
+		is_group INTEGER NOT NULL DEFAULT 0, last_ts INTEGER NOT NULL DEFAULT 0, unread INTEGER NOT NULL DEFAULT 0);
+		INSERT INTO chats (jid, name, last_ts) VALUES ('1@s.whatsapp.net', 'Ada', 100)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.ArchiveUnknown {
+		t.Error("a store without the column does not know which chats are archived")
+	}
+	if err := s.SetArchived("1@s.whatsapp.net", true); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetChat("1@s.whatsapp.net"); !c.Archived || c.Name != "Ada" {
+		t.Errorf("existing chat keeps its row and takes the flag: %+v", c)
+	}
+	s.Close()
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if s.ArchiveUnknown {
+		t.Error("the second open finds the column and asks nothing")
 	}
 }
