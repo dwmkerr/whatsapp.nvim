@@ -9,8 +9,8 @@ build: # Build the Go bridge into dist/bin/wa-bridge.
 	$(MAKE) -C dist build
 
 .PHONY: dev
-dev: build # Build the bridge, then open Neovim with WhatsApp.
-	nvim +WhatsApp
+dev: build # Build the bridge, then open Neovim with WhatsApp from this checkout.
+	nvim --cmd "set runtimepath^=$(CURDIR)/dist" +WhatsApp
 
 .PHONY: test
 test: # Run the Go and Lua test suites.
