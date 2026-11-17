@@ -315,6 +315,9 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		return 0
 	}
 	changed := 0
+	// Fetched at most once per pass, and only when a group's own lookup
+	// fails: some groups never answer it but still appear in this list.
+	var joined map[string]string
 	for _, c := range chats {
 		jid, err := types.ParseJID(c.JID)
 		if err != nil {
@@ -322,9 +325,20 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		}
 		var name string
 		if c.IsGroup {
-			if n, err := w.groupName(ctx, jid); err == nil {
-				name = n
+			n, err := w.groupName(ctx, jid)
+			if err != nil {
+				if joined == nil {
+					var jerr error
+					if joined, jerr = w.joinedGroupNames(ctx); jerr != nil {
+						w.log.Warnf("joined groups: %v", jerr)
+					}
+				}
+				n = joined[c.JID]
+				if n == "" {
+					w.log.Warnf("group %s has no name yet: %v", c.JID, err)
+				}
 			}
+			name = n
 		} else {
 			name = w.contactName(ctx, jid)
 		}

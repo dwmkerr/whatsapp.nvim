@@ -160,6 +160,17 @@ func TestGroupNamedOnceTheServerAnswers(t *testing.T) {
 	}
 }
 
+func TestGroupNamedFromTheJoinedListWhenItsLookupFails(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	c, err := w.store.GetChat("120363400000000006@g.us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Harbour Swimmers" {
+		t.Errorf("a group whose own lookup keeps failing takes its name from the joined-groups list: %+v", c)
+	}
+}
+
 func TestStoredGroupPlaceholderIsRetried(t *testing.T) {
 	s := newTestStore(t)
 	jid := "120363400000000009@g.us"
