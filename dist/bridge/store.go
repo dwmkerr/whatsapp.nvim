@@ -33,10 +33,15 @@ type Message struct {
 	Filename   string `json:"filename,omitempty"`
 	QuotedID   string `json:"quoted_id,omitempty"`
 	QuotedText string `json:"quoted_text,omitempty"`
-	Seconds    int    `json:"seconds,omitempty"`
-	Waveform   []int  `json:"waveform,omitempty"`
-	Cached     bool   `json:"cached,omitempty"`
-	raw        []byte
+	// What the quote needs when the quoted message has no text: who sent it
+	// ("me" for our own) and its media, so the editor can show a tag.
+	QuotedSender   string `json:"quoted_sender,omitempty"`
+	QuotedMedia    string `json:"quoted_media_type,omitempty"`
+	QuotedFilename string `json:"quoted_filename,omitempty"`
+	Seconds        int    `json:"seconds,omitempty"`
+	Waveform       []int  `json:"waveform,omitempty"`
+	Cached         bool   `json:"cached,omitempty"`
+	raw            []byte
 }
 
 type Store struct {

@@ -66,7 +66,7 @@ return function()
   check(vlines[2]:find("[voice 1:02 ▁█▄▁ ✓]", 1, true) ~= nil, "voice note shows duration, waveform and cached tick: " .. vlines[2])
   check(vlines[3]:find("[video clip.mp4 0:05 ⇣]", 1, true) ~= nil, "video keeps its filename and shows duration")
 
-  local blines, bowners = format.bubbles({
+  local blines, bowners, bspans = format.bubbles({
     { id = "1", text = "a fairly long message that needs wrapping across lines", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },
     { id = "2", text = "ok", ts = 1760390060, from_me = true, sender_name = "me" },
   }, false, 40)
@@ -86,6 +86,13 @@ return function()
     end
   end
   check(me_head and blines[me_head]:match("^%s+╭") ~= nil, "own bubble is right-aligned")
+  local me_fill
+  for _, sp in ipairs(bspans) do
+    if sp[1] == me_head - 1 and sp[4] == "WhatsAppBubbleMe" then
+      me_fill = sp
+    end
+  end
+  check(me_fill and me_fill[2] == #blines[me_head]:match("^%s*") and me_fill[3] == #blines[me_head], "own bubble fill covers the box, not the margin")
   check(me_head and bowners[me_head] and bowners[me_head].id == "2", "bubble lines map to their message")
   for _, l in ipairs(blines) do
     check(vim.fn.strdisplaywidth(l) <= 40, "bubble line fits width: " .. l)
@@ -248,7 +255,41 @@ return function()
   check(vim.fn.filereadable(marker) == 0, "winbar does not evaluate remote names")
   check(rendered:find("%{system", 1, true) ~= nil, "winbar shows remote name literally")
   check(rendered:find("+111", 1, true) ~= nil, "winbar shows phone number for direct chats")
+  local compose_rendered = vim.api.nvim_eval_statusline(vim.wo[S.wins.compose].winbar, { winid = S.wins.compose, use_winbar = true }).str
+  check(vim.fn.filereadable(marker) == 0 and compose_rendered:find("%{system", 1, true) ~= nil, "compose winbar shows remote names literally")
   S.chat_by_jid["111@s.whatsapp.net"].name = "Alice"
+
+  -- Compose winbar: one line, keys pinned right, the recipient's number
+  -- left to the chat pane unless there is no name.
+  local compose_ui = require("whatsapp.ui.compose")
+  local function compose_bar()
+    compose_ui.update_winbar()
+    return vim.api.nvim_eval_statusline(vim.wo[S.wins.compose].winbar, { winid = S.wins.compose, use_winbar = true })
+  end
+  local bar = compose_bar()
+  check(bar.str:find("→ Alice", 1, true) ~= nil and bar.str:find("+111", 1, true) == nil, "compose names the recipient without the number: " .. bar.str)
+  check(bar.str:match(":w send  g%? help %s*$") ~= nil and vim.wo[S.wins.compose].winbar:find("%=", 1, true) ~= nil, "compose keys sit on the right")
+  S.chat_by_jid["111@s.whatsapp.net"].name = "111"
+  check(compose_bar().str:find("→ +111", 1, true) ~= nil, "compose falls back to the number when there is no name")
+  S.chat_by_jid["111@s.whatsapp.net"].name = "Alice"
+  compose_ui.draft().reply_to = { from_me = false, sender_name = "Alice Fenwick", text = "", media_type = "document", filename = "route-plan.pdf" }
+  bar = compose_bar()
+  check(vim.startswith(bar.str, " ↳ Alice: [doc") and bar.str:find("→", 1, true) == nil, "a reply to a document replaces the recipient: " .. bar.str)
+  local qwho, qsnip = format.quote_parts("Alice Fenwick", "", "document", "route-plan.pdf")
+  check(qwho == "Alice" and qsnip == "[document route-plan.pdf]", "the reply names the sender's first name and the file")
+  check(bar.str:match("q cancel  :w send  g%? help %s*$") ~= nil, "replying adds q cancel on the right")
+  compose_ui.draft().reply_to.text = string.rep("a long quoted message ", 20)
+  bar = compose_bar()
+  check(bar.width <= vim.api.nvim_win_get_width(S.wins.compose) and bar.str:find("…", 1, true) ~= nil and vim.startswith(bar.str, " ↳ Alice: "), "a long quote is cut with … and the bar keeps its start")
+  compose_ui.draft().reply_to = nil
+  compose_ui.update_winbar()
+
+  -- Quotes always say something: the text, or a tag for media without it.
+  local fq = format.quote
+  check(fq({ quoted_id = "x", quoted_sender = "Bram Okafor", quoted_media_type = "voice", quoted_filename = "audio.ogg" }) == "Bram · [voice]", "a reply to a voice note quotes a tag")
+  check(fq({ quoted_id = "x", quoted_sender = "Bram Okafor", quoted_media_type = "image", quoted_filename = "image.jpg" }) == "Bram · [image]", "generic picture names are dropped from the quote")
+  check(fq({ quoted_id = "x", quoted_sender = "me", quoted_text = "hi\nthere" }) == "You · hi there", "a quote of our own message says You, on one line")
+  check(fq({ quoted_id = "x", quoted_text = "" }) == nil and fq({ quoted_text = "orphan" }) == nil, "nothing to quote, no quote line")
 
   -- The fake pushes a live message after the first messages.list.
   check(wait_for(function()
@@ -458,8 +499,8 @@ return function()
     end, 5000), "bubbles layout puts the rows above the footer")
     local bvl = image_marks()[1][4].virt_lines[1]
     local footer = vim.api.nvim_buf_get_lines(S.bufs.chat, image_marks()[1][2], image_marks()[1][2] + 1, false)[1]
-    check(bvl[1][1]:match("│ $") ~= nil and bvl[3][1]:match(" │$") ~= nil and bvl[1][2] == "WhatsAppBubble", "picture rows carry the bubble's borders")
-    check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[3][1]) + vim.fn.strchars(bvl[2][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
+    check(bvl[2][1] == "│ " and bvl[4][1]:match(" │$") ~= nil and bvl[2][2] == "WhatsAppBubble" and bvl[1][2] == nil, "picture rows carry the bubble's borders, the margin unfilled")
+    check(vim.fn.strdisplaywidth(bvl[1][1] .. bvl[2][1] .. bvl[4][1]) + vim.fn.strchars(bvl[3][1]) / 3 == vim.fn.strdisplaywidth(footer), "picture rows are as wide as the box")
     S.opts.layout = "lines"
     -- Reopening a chat rebuilds its message objects without the path; the
     -- picture must survive that.

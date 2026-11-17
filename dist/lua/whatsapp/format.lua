@@ -101,6 +101,48 @@ local function dw(s)
   return vim.fn.strdisplaywidth(s)
 end
 
+local generic_names = { image = true, audio = true, video = true, sticker = true, document = true }
+
+-- What a reply quotes, as the phone's quote strip shows it: the sender's
+-- first name, and the text or, when there is none, a media tag, so a reply
+-- to a voice note or document still says what it answered. Returns
+-- who, snippet; who is nil when the bridge did not say.
+function M.quote_parts(sender, body, media, filename)
+  local snippet = (text.single_line(body or ""):gsub("%s+", " "))
+  if snippet == "" and media and media ~= "" then
+    -- Generic names (audio.ogg, image.jpg, sticker.webp) say nothing.
+    local name = filename or ""
+    local kind = name:match("^(%a+)%.%w+$")
+    if media == "voice" or (kind and generic_names[kind]) then
+      name = ""
+    end
+    snippet = "[" .. media .. (name ~= "" and (" " .. text.name(name)) or "") .. "]"
+  end
+  if snippet == "" then
+    return nil, nil
+  end
+  local who
+  if sender == "me" then
+    who = "You"
+  elseif sender and sender ~= "" then
+    who = text.name(sender):match("^%S+")
+  end
+  return who, snippet
+end
+
+-- The quote line inside a reply's bubble, or nil when there is nothing to
+-- quote.
+function M.quote(m)
+  if not m.quoted_id or m.quoted_id == "" then
+    return nil
+  end
+  local who, snippet = M.quote_parts(m.quoted_sender, m.quoted_text, m.quoted_media_type, m.quoted_filename)
+  if not snippet then
+    return nil
+  end
+  return who and (who .. " · " .. snippet) or snippet
+end
+
 -- Word-wrap one paragraph to a display width. Words longer than the width
 -- are split by character.
 local function wrap(text, width)
@@ -144,11 +186,13 @@ function M.bubbles(messages, is_group, width, image_cols)
   local last_day = nil
   local max_box = math.max(24, math.floor(width * 0.7))
   local inner_max = max_box - 4
-  local function add(text, owner, group)
+  -- from: first byte of the bubble. Its fill stops at the box so own
+  -- messages read as bubbles rather than full-width bands.
+  local function add(text, owner, group, from)
     lines[#lines + 1] = text
     owners[#lines] = owner
     if group then
-      spans[#spans + 1] = { #lines - 1, 0, -1, group }
+      spans[#spans + 1] = from and { #lines - 1, from, #text, group } or { #lines - 1, 0, -1, group }
     end
     return #lines
   end
@@ -170,9 +214,9 @@ function M.bubbles(messages, is_group, width, image_cols)
     end
     local content = {}
     local quote_lines = 0
-    if m.quoted_text and m.quoted_text ~= "" then
-      local q = m.quoted_text:gsub("\n", " ")
-      content[1] = "↳ " .. vim.fn.strcharpart(q, 0, inner_max - 2)
+    local q = M.quote(m)
+    if q then
+      content[1] = text.fit("↳ " .. q, inner_max)
       quote_lines = 1
     end
     for _, l in ipairs(wrap(body, inner_max)) do
@@ -193,11 +237,11 @@ function M.bubbles(messages, is_group, width, image_cols)
 
     add("", nil)
     local head = indent .. "╭─ " .. who .. " " .. string.rep("─", inner - dw(who) - 1) .. "╮"
-    local n = add(head, m, bubble)
+    local n = add(head, m, bubble, #indent)
     spans[#spans + 1] = { n - 1, #indent + #"╭─ ", #indent + #"╭─ " + #who, m.from_me and "WhatsAppMe" or "WhatsAppSender" }
     for i, l in ipairs(content) do
       local padded = l .. string.rep(" ", inner - dw(l))
-      local n2 = add(indent .. "│ " .. padded .. " │", m, bubble)
+      local n2 = add(indent .. "│ " .. padded .. " │", m, bubble, #indent)
       if i <= quote_lines then
         spans[#spans + 1] = { n2 - 1, #indent + #"│ ", #indent + #"│ " + #l, "WhatsAppQuote" }
       elseif tag and i == quote_lines + 1 then
@@ -205,7 +249,7 @@ function M.bubbles(messages, is_group, width, image_cols)
       end
     end
     local foot_prefix = indent .. "╰" .. string.rep("─", inner - #time - 1) .. " "
-    local n3 = add(foot_prefix .. time .. " ─╯", m, bubble)
+    local n3 = add(foot_prefix .. time .. " ─╯", m, bubble, #indent)
     spans[#spans + 1] = { n3 - 1, #foot_prefix, #foot_prefix + #time, "WhatsAppTime" }
   end
   return lines, owners, spans
@@ -250,8 +294,8 @@ function M.conversation(messages, is_group)
       spans[#spans + 1] = { n - 1, 0, -1, "WhatsAppSeparator" }
       last_day = day
     end
-    if m.quoted_text and m.quoted_text ~= "" then
-      local q = m.quoted_text:gsub("\n", " ")
+    local q = M.quote(m)
+    if q then
       local n = add("      ↳ " .. q, m)
       spans[#spans + 1] = { n - 1, 0, -1, "WhatsAppQuote" }
     end

@@ -813,6 +813,7 @@ local function build_layout()
       if S.layout_valid() then
         chat.render()
         list.render()
+        compose.update_winbar()
       end
     end,
   })

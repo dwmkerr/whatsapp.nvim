@@ -1,4 +1,6 @@
 local S = require("whatsapp.state")
+local format = require("whatsapp.format")
+local text = require("whatsapp.text")
 
 local M = {}
 
@@ -64,23 +66,53 @@ function M.clear(jid)
   vim.bo[buf].modified = false
 end
 
+-- Cut s to at most width display cells, marking the cut with an ellipsis.
+local function clip(s, width)
+  if vim.fn.strdisplaywidth(s) <= width then
+    return s
+  end
+  return text.fit(s, math.max(0, width - 1)) .. "…"
+end
+
+-- The recipient by name; the number only when there is no name, since the
+-- chat pane's winbar already shows it.
+local function recipient(jid)
+  local name = S.chat_name(jid)
+  local user = jid:match("^([^@]+)@s%.whatsapp%.net$")
+  if user and name == user then
+    return "+" .. user
+  end
+  return name
+end
+
+-- One line: what this message is (to whom, or what it replies to) on the
+-- left, keys pinned right. Replying replaces the recipient, which the chat
+-- pane already names, so the quote gets the room. The left side is cut to
+-- fit; Neovim would otherwise cut the whole bar from the left.
 function M.update_winbar()
   if not S.win_valid("compose") then
     return
   end
-  local target = S.current and S.chat_title(S.current) or "nobody"
-  local bar = " → " .. S.bar_text(target)
   local draft = M.draft()
   local reply = draft and draft.reply_to
+  local keys = { { ":w", "send" }, { "g?", "help" } }
+  local left
   if reply then
-    local who = reply.from_me and "me" or reply.sender_name
-    local snippet = (reply.text or ""):gsub("\n", " ")
-    if #snippet > 40 then
-      snippet = snippet:sub(1, 40) .. "…"
-    end
-    bar = bar .. "  ·  ↳ " .. S.bar_text(who) .. ": " .. S.bar_text(snippet) .. "  ·  q cancel"
+    table.insert(keys, 1, { "q", "cancel" })
+    local who, snippet = format.quote_parts(reply.from_me and "me" or reply.sender_name,
+      reply.text, reply.media_type, reply.filename)
+    left = "↳ " .. (who or "") .. ((who and snippet) and ": " or "") .. (snippet or "")
+  else
+    left = "→ " .. (S.current and recipient(S.current) or "nobody")
   end
-  vim.wo[S.wins.compose].winbar = bar .. "  ·  :w send  ·  g? help"
+  local right, plain = {}, {}
+  for _, k in ipairs(keys) do
+    right[#right + 1] = "%#Special#" .. k[1] .. "%#Comment# " .. k[2]
+    plain[#plain + 1] = k[1] .. " " .. k[2]
+  end
+  local room = vim.api.nvim_win_get_width(S.wins.compose) - vim.fn.strdisplaywidth(table.concat(plain, "  ")) - 4
+  left = clip(text.single_line(left), room)
+  vim.wo[S.wins.compose].winbar = " " .. S.bar_text(left) .. "%=" .. table.concat(right, "  ") .. "%* "
 end
 
 return M
