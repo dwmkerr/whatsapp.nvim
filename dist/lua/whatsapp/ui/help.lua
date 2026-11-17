@@ -15,7 +15,7 @@ local keys = {
     { "<CR> l", "open chat" },
     { "i", "open chat and compose" },
     { "u", "next unread chat" },
-    { "f", "filter: all / unread / groups" },
+    { "f", "filter: all / unread / groups / archived" },
     { "gU gu ~", "mark unread / read / toggle" },
     { "gx ]m [m", "open / next / previous media in the open chat" },
     { "K L", "older messages / toggle layout in the open chat" },

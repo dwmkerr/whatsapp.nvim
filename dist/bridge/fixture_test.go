@@ -32,7 +32,7 @@ func replayFixture(t *testing.T, path string) (*WA, *bytes.Buffer) {
 	if err := w.useFixture(context.Background(), fx); err != nil {
 		t.Fatal(err)
 	}
-	w.replay(fx, false)
+	w.replay(fx, 0)
 	return w, &out
 }
 
@@ -94,6 +94,29 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	}
 	if st := w.Status(); st["paired"] != true || st["connected"] != true {
 		t.Errorf("fixture looks paired and connected: %v", st)
+	}
+}
+
+func TestArchivedChatsFollowThePhone(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	by := chatsByName(t, w)
+	for name, want := range map[string]bool{
+		"Five-a-side Fridays": true,  // history sync, and a new message does not unarchive it
+		"Allotment Society":   true,  // history sync
+		"Book Club":           true,  // app state full sync only
+		"Cleo Marsh":          true,  // live archive after connecting
+		"Ada Fenwick":         false, // never archived
+		"Boulder Wednesdays":  false,
+	} {
+		if c, ok := by[name]; !ok || c.Archived != want {
+			t.Errorf("%s archived = %v, want %v: %+v", name, c.Archived, want, c)
+		}
+	}
+	if c := by["Five-a-side Fridays"]; c.Unread != 40 {
+		t.Errorf("archived chats keep counting unread for the Archived filter: %+v", c)
+	}
+	if w.store.ArchiveUnknown {
+		t.Error("a fresh store never asks the phone for the archive again")
 	}
 }
 

@@ -4,7 +4,7 @@ local M = {
   opts = nil,
   chats = {},        -- array of chat rows from the bridge, newest first
   chat_by_jid = {},
-  filter = "all",    -- chat list filter: all, unread or groups
+  filter = "all",    -- chat list filter: all, unread, groups or archived
   current = nil,     -- jid of the open conversation
   messages = {},     -- jid -> array of messages, oldest first
   drafts = {},      -- jid -> session-only compose buffer, reply and pending send
@@ -39,6 +39,18 @@ end
 
 -- Columns available for text in a window, after number/sign columns the
 -- user's config may force on.
+-- Chats outside the archive. Counts leave archived chats out, as the phone's
+-- do, so a muted-and-archived group never reads as dozens of unread.
+function M.inbox()
+  local out = {}
+  for _, c in ipairs(M.chats) do
+    if not c.archived then
+      out[#out + 1] = c
+    end
+  end
+  return out
+end
+
 function M.text_width(name, fallback)
   if not M.win_valid(name) then
     return fallback

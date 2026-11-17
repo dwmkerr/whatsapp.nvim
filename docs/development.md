@@ -36,7 +36,7 @@ The dataset is meant to grow. When a bug comes from a real account, add the smal
 }
 ```
 
-Every event takes an optional `note` and `delay_ms`, a pause before the event so recordings show progress. Message times (`at`) are Go durations from when the replay starts, such as `-26h`, or RFC 3339 timestamps.
+Every event takes an optional `note` and `delay_ms`, a pause before the event so recordings show progress. `make demo PACE=4` stretches every pause four times, for screen captures too slow to catch a state that lasts under a second. Message times (`at`) are Go durations from when the replay starts, such as `-26h`, or RFC 3339 timestamps.
 
 | `type` | Fields | Replays as |
 | --- | --- | --- |

@@ -144,7 +144,7 @@ return function()
 
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
-  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
+  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil and list_lines[1]:find("Archived", 1, true) ~= nil, "filter line names every filter")
   check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
   check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
 
@@ -161,6 +161,9 @@ return function()
   vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
   check(list.jid_under_cursor() == nil, "filter line has no chat")
   vim.api.nvim_set_current_win(S.wins.list)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+  check(S.filter == "archived" and vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no archived chats", 1, true) ~= nil, "<CR> on the filter line cycles to archived, empty here")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
   check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all")
   S.filter = "groups"
@@ -187,6 +190,38 @@ return function()
   list.next_unread()
   check(S.current == "111@s.whatsapp.net" and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "u wraps to the unread chat past the filter line")
   S.current = nil
+
+  -- Archived chats only show under their own filter and stay out of every
+  -- count, so a busy archived group cannot bury the chats that matter.
+  local chat_ui = require("whatsapp.ui.chat")
+  local before_chats = S.chats
+  local with_archived = vim.deepcopy(before_chats)
+  for _, c in ipairs(with_archived) do
+    c.unread = c.jid == "111@s.whatsapp.net" and 2 or 0
+  end
+  S.set_chats(vim.list_extend(with_archived, {
+    { jid = "333@g.us", name = "Five-a-side", is_group = true, last_ts = 1760500000, unread = 39, archived = true },
+  }))
+  list.render()
+  local rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(#rows == 3 and not table.concat(rows, "\n"):find("Five-a-side", 1, true), "all leaves archived chats out")
+  check(list_bar():find("1 unread", 1, true) ~= nil, "winbar unread count leaves archived chats out: " .. list_bar())
+  chat_ui.render()
+  check(splash_has("2 chats · 1 unread"), "splash counts leave archived chats out")
+  S.filter = "groups"
+  list.render()
+  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "groups leaves archived groups out")
+  S.filter = "unread"
+  list.render()
+  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "unread leaves archived chats out")
+  S.filter = "archived"
+  list.render()
+  rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(#rows == 2 and rows[2]:find("Five-a-side", 1, true) ~= nil and list.jid_under_cursor() == "333@g.us", "archived filter lists only archived chats")
+  S.filter = "all"
+  S.set_chats(before_chats)
+  list.render()
+  chat_ui.render()
 
   wa.open_chat("111@s.whatsapp.net")
   check(wait_for(function() return S.messages["111@s.whatsapp.net"] ~= nil end), "messages loaded")

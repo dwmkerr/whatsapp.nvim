@@ -128,6 +128,14 @@
       "at": "-13h"
     },
     {
+      "type": "archive",
+      "note": "Archived on the phone before pairing. History sync sent the chat without the flag; only the app state full sync says it is archived.",
+      "chat": "120363400000000004@g.us",
+      "archived": true,
+      "full_sync": true,
+      "at": "-30h"
+    },
+    {
       "type": "offline_preview",
       "note": "Messages that arrived while the bridge was offline, replayed one by one.",
       "messages": 4,
@@ -143,6 +151,13 @@
       "note": "Ada's chat read on the phone after the bridge connected.",
       "chat": "447700900101@s.whatsapp.net",
       "ids": ["ADA04"],
+      "delay_ms": 1500
+    },
+    {
+      "type": "archive",
+      "note": "Cleo's chat archived on the phone while the plugin is open. It should leave the list straight away.",
+      "chat": "447700900103@s.whatsapp.net",
+      "archived": true,
       "delay_ms": 1500
     }
   ]
