@@ -33,18 +33,15 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = m.GetConversation()
 	case m.ExtendedTextMessage != nil:
 		e.Text = m.ExtendedTextMessage.GetText()
-		e.QuotedID = m.ExtendedTextMessage.GetContextInfo().GetStanzaID()
 	case m.ImageMessage != nil:
 		e.MediaType = "image"
 		e.Text = m.ImageMessage.GetCaption()
 		e.Filename = filenameFor("image", m.ImageMessage.GetMimetype())
-		e.QuotedID = m.ImageMessage.GetContextInfo().GetStanzaID()
 	case m.VideoMessage != nil:
 		e.MediaType = "video"
 		e.Text = m.VideoMessage.GetCaption()
 		e.Filename = filenameFor("video", m.VideoMessage.GetMimetype())
 		e.Seconds = int(m.VideoMessage.GetSeconds())
-		e.QuotedID = m.VideoMessage.GetContextInfo().GetStanzaID()
 	case m.AudioMessage != nil:
 		e.MediaType = "audio"
 		if m.AudioMessage.GetPTT() {
@@ -62,7 +59,6 @@ func extract(m *waE2E.Message) extracted {
 		if e.Filename == "" {
 			e.Filename = filenameFor("document", m.DocumentMessage.GetMimetype())
 		}
-		e.QuotedID = m.DocumentMessage.GetContextInfo().GetStanzaID()
 	case m.StickerMessage != nil:
 		e.MediaType = "sticker"
 		e.Filename = "sticker.webp"
@@ -83,7 +79,28 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = unsupportedText
 	}
 	e.Text = strings.TrimRight(e.Text, "\n")
+	e.QuotedID = contextInfo(m).GetStanzaID()
 	return e
+}
+
+// contextInfo returns the reply context whichever kind of message carries
+// it, so a voice note or sticker sent as a reply keeps its quote too.
+func contextInfo(m *waE2E.Message) *waE2E.ContextInfo {
+	switch {
+	case m.ExtendedTextMessage != nil:
+		return m.ExtendedTextMessage.GetContextInfo()
+	case m.ImageMessage != nil:
+		return m.ImageMessage.GetContextInfo()
+	case m.VideoMessage != nil:
+		return m.VideoMessage.GetContextInfo()
+	case m.AudioMessage != nil:
+		return m.AudioMessage.GetContextInfo()
+	case m.DocumentMessage != nil:
+		return m.DocumentMessage.GetContextInfo()
+	case m.StickerMessage != nil:
+		return m.StickerMessage.GetContextInfo()
+	}
+	return nil
 }
 
 func filenameFor(kind, contentType string) string {

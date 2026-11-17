@@ -90,8 +90,8 @@ type fixtureMsg struct {
 	// reply, as the phone does, for replies to messages the store never saw.
 	QuotedText string `json:"quoted_text,omitempty"`
 	QuotedFrom string `json:"quoted_from,omitempty"`
-	PushName string `json:"push_name,omitempty"`
-	At       string `json:"at,omitempty"` // Go duration from the replay start ("-26h"), or RFC 3339
+	PushName   string `json:"push_name,omitempty"`
+	At         string `json:"at,omitempty"` // Go duration from the replay start ("-26h"), or RFC 3339
 }
 
 func loadFixture(path string, clock time.Time) (*fixture, error) {

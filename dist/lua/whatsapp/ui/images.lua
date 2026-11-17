@@ -577,9 +577,10 @@ function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
   local rows = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent)
   if box then
     local pad = string.rep(" ", math.max(0, box.inner - entry.cols))
-    for _, r in ipairs(rows) do
-      r[1] = { indent .. "│ ", box.hl }
-      r[3] = { pad .. " │", box.hl }
+    -- The margin stays unfilled so the picture rows match the bubble's
+    -- text rows, whose fill also stops at the box.
+    for i, r in ipairs(rows) do
+      rows[i] = { { indent }, { "│ ", box.hl }, r[2], { pad .. " │", box.hl } }
     end
   end
   vim.api.nvim_buf_set_extmark(buf, ns, anchor - 1, 0, { virt_lines = rows, virt_lines_above = box ~= nil })

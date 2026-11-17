@@ -407,11 +407,7 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 	} else {
 		_ = w.store.IncrementUnread(chat.String())
 	}
-	if m.QuotedID != "" {
-		if q, err := w.store.GetMessage(chat.String(), m.QuotedID); err == nil {
-			m.QuotedText = q.Text
-		}
-	}
+	w.quote(ctx, &m)
 	w.out.Emit("message", map[string]interface{}{"chat_name": name, "message": m})
 }
 
@@ -572,7 +568,43 @@ func (w *WA) SendText(ctx context.Context, chatJID, text, replyTo string) (Messa
 	}
 	_ = w.store.UpsertChat(chatJID, "", chat.Server == types.GroupServer, m.TS)
 	_, _ = w.store.InsertMessage(m)
+	w.quote(ctx, &m)
 	return m, nil
+}
+
+// quote fills in what a reply quotes, so the editor can always show it: the
+// stored original when there is one, otherwise the copy the reply carries,
+// since the original can be older than the stored history.
+func (w *WA) quote(ctx context.Context, m *Message) {
+	if m.QuotedID == "" {
+		return
+	}
+	if q, err := w.store.GetMessage(m.ChatJID, m.QuotedID); err == nil {
+		m.QuotedText, m.QuotedMedia, m.QuotedFilename = q.Text, q.MediaType, q.Filename
+		m.QuotedSender = q.SenderName
+		if q.FromMe {
+			m.QuotedSender = "me"
+		}
+		return
+	}
+	var pm waE2E.Message
+	if m.raw == nil || proto.Unmarshal(m.raw, &pm) != nil {
+		return
+	}
+	ci := contextInfo(&pm)
+	if ci.GetQuotedMessage() == nil {
+		return
+	}
+	e := extract(ci.GetQuotedMessage())
+	m.QuotedText, m.QuotedMedia, m.QuotedFilename = e.Text, e.MediaType, e.Filename
+	if p, err := types.ParseJID(ci.GetParticipant()); err == nil && !p.IsEmpty() {
+		from := w.canonical(ctx, p, types.EmptyJID)
+		if w.cli.Store.ID != nil && from.User == w.cli.Store.ID.User {
+			m.QuotedSender = "me"
+		} else {
+			m.QuotedSender = w.senderName(ctx, from, "", false)
+		}
+	}
 }
 
 func (w *WA) React(ctx context.Context, chatJID, msgID, emoji string) error {
@@ -816,6 +848,7 @@ func (w *WA) ListMessages(jid string, limit int, before int64) ([]Message, error
 			continue
 		}
 		w.decorate(&msgs[i])
+		w.quote(context.Background(), &msgs[i])
 		kept = append(kept, msgs[i])
 	}
 	return kept, nil

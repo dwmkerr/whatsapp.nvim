@@ -120,6 +120,35 @@ func TestArchivedChatsFollowThePhone(t *testing.T) {
 	}
 }
 
+func TestRepliesAlwaysCarryTheirQuote(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	group := "120363400000000001@g.us"
+	msgs, err := w.ListMessages(group, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]Message{}
+	for _, m := range msgs {
+		by[m.ID] = m
+	}
+	if m := by["BW11"]; m.QuotedMedia != "document" || m.QuotedFilename != "route-plan.pdf" || m.QuotedSender != "Dev Patel-Ruiz" {
+		t.Errorf("a reply to a document names its sender and file: %+v", m)
+	}
+	if m := by["BW12"]; m.QuotedText != "Who's helping with the reset on Sunday?" || m.QuotedSender != "Dev Patel-Ruiz" {
+		t.Errorf("a reply to a message older than the store uses the copy it carries: %+v", m)
+	}
+	sent, err := w.SendText(context.Background(), group, "Bringing chalk", "BW05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.QuotedMedia != "voice" || sent.QuotedSender != "Bram Okafor" {
+		t.Errorf("our own reply comes back with its quote: %+v", sent)
+	}
+	if mine, err := w.SendText(context.Background(), group, "Again", sent.ID); err != nil || mine.QuotedSender != "me" || mine.QuotedText != "Bringing chalk" {
+		t.Errorf("a reply to our own message quotes \"me\": %+v %v", mine, err)
+	}
+}
+
 func TestFixtureSendsStayLocal(t *testing.T) {
 	w, _ := replayFixture(t, syntheticFixture)
 	jid := "447700900105@s.whatsapp.net"
