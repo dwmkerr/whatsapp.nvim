@@ -409,6 +409,9 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 		_ = w.store.IncrementUnread(chat.String())
 	}
 	w.quote(ctx, &m)
+	if name == "" {
+		name = groupPlaceholder(chat.User)
+	}
 	w.out.Emit("message", map[string]interface{}{"chat_name": name, "message": m})
 }
 
@@ -497,8 +500,11 @@ func (w *WA) canonical(ctx context.Context, jid, alt types.JID) types.JID {
 	return jid
 }
 
+// chatName returns "" for a group whose name is not known yet, rather than
+// a placeholder: a stored placeholder looked like a real name, so nothing
+// ever asked again. The editor shows groupPlaceholder in the meantime.
 func (w *WA) chatName(ctx context.Context, jid types.JID, pushName string, isGroup bool) string {
-	if n := w.store.ChatName(jid.String()); n != "" {
+	if n := w.store.ChatName(jid.String()); n != "" && n != groupPlaceholder(jid.User) {
 		return n
 	}
 	if n, ok := w.names.Load(jid.String()); ok {
@@ -509,7 +515,7 @@ func (w *WA) chatName(ctx context.Context, jid types.JID, pushName string, isGro
 			w.names.Store(jid.String(), n)
 			return n
 		}
-		return "Group " + jid.User
+		return ""
 	}
 	return w.senderName(ctx, jid, pushName, false)
 }

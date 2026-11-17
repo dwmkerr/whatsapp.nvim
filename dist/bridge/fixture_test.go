@@ -149,6 +149,41 @@ func TestRepliesAlwaysCarryTheirQuote(t *testing.T) {
 	}
 }
 
+func TestGroupNamedOnceTheServerAnswers(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	c, err := w.store.GetChat("120363400000000005@g.us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Ridge Walkers" {
+		t.Errorf("a group whose first lookup failed is named after the next sync: %+v", c)
+	}
+}
+
+func TestStoredGroupPlaceholderIsRetried(t *testing.T) {
+	s := newTestStore(t)
+	jid := "120363400000000009@g.us"
+	if err := s.UpsertChat(jid, "Group 120363400000000009", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	unnamed, err := s.UnnamedChats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unnamed) != 1 || unnamed[0].JID != jid {
+		t.Errorf("a placeholder saved by an older bridge is retried: %+v", unnamed)
+	}
+	if err := s.UpsertChat("120363400000000010@g.us", "", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetChat("120363400000000010@g.us"); c.Name != "Group 120363400000000010" {
+		t.Errorf("an unnamed group still shows a placeholder: %+v", c)
+	}
+	if n := s.ChatName("120363400000000010@g.us"); n != "" {
+		t.Errorf("the placeholder is never stored: %q", n)
+	}
+}
+
 func TestFixtureSendsStayLocal(t *testing.T) {
 	w, _ := replayFixture(t, syntheticFixture)
 	jid := "447700900105@s.whatsapp.net"
