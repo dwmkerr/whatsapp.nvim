@@ -51,6 +51,8 @@ type fixtureName struct {
 //	read_receipt     chat, ids, at
 //	offline_preview  messages
 //	offline_done     messages
+//	group_info       chat, name: the server answers group info requests for
+//	                 chat from here on; before it, they fail, as they can live
 type fixtureEvent struct {
 	Type    string `json:"type"`
 	Note    string `json:"note,omitempty"`     // why the event is in the dataset, e.g. the issue it reproduces
@@ -66,6 +68,7 @@ type fixtureEvent struct {
 	Archived *bool    `json:"archived,omitempty"`
 	FullSync bool     `json:"full_sync,omitempty"`
 	IDs      []string `json:"ids,omitempty"`
+	Name     string   `json:"name,omitempty"`
 	Messages int      `json:"messages,omitempty"`
 }
 
@@ -349,6 +352,15 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 		return &events.OfflineSyncPreview{Messages: e.Messages, Total: e.Messages}, nil
 	case "offline_done":
 		return &events.OfflineSyncCompleted{Count: e.Messages}, nil
+	case "group_info":
+		chat, err := parseFixtureJID(e.Chat)
+		if err != nil {
+			return nil, err
+		}
+		if chat.Server != types.GroupServer || e.Name == "" {
+			return nil, fmt.Errorf("group_info needs a group chat and a name")
+		}
+		return &fixtureGroupInfo{JID: chat, Name: e.Name}, nil
 	}
 	return nil, fmt.Errorf("unknown event type %q", e.Type)
 }
@@ -393,6 +405,13 @@ func (w *WA) useFixture(ctx context.Context, fx *fixture) error {
 // replay sends the timeline through handleEvent in order, as the servers
 // would after connecting. A pace of 0 skips the delays, for tests; recordings
 // raise it so slow screen captures still catch states that pass in a second.
+// fixtureGroupInfo is not a whatsmeow event: replay keeps it as the answer
+// groupName gives from then on.
+type fixtureGroupInfo struct {
+	JID  types.JID
+	Name string
+}
+
 func (w *WA) replay(fx *fixture, pace float64) {
 	w.handleEvent(&events.Connected{})
 	for i, e := range fx.Events {
@@ -402,6 +421,10 @@ func (w *WA) replay(fx *fixture, pace float64) {
 		evt, err := fx.build(e, i)
 		if err != nil {
 			w.log.Errorf("fixture event %d: %v", i, err)
+			continue
+		}
+		if gi, ok := evt.(*fixtureGroupInfo); ok {
+			w.groupNames.Store(gi.JID.String(), gi.Name)
 			continue
 		}
 		w.handleEvent(evt)

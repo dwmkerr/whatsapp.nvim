@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -166,7 +167,11 @@ func (s *Store) RenameChat(jid, name string) error {
 
 // UnnamedChats lists chats whose name is still the bare phone number or empty.
 func (s *Store) UnnamedChats() ([]Chat, error) {
-	rows, err := s.db.Query(`SELECT jid, name, is_group FROM chats WHERE name = '' OR name = substr(jid, 1, instr(jid, '@') - 1)`)
+	// 'Group <id>' rows were stored as names by older bridges when a group
+	// lookup failed; retrying them is how those stores recover.
+	rows, err := s.db.Query(`SELECT jid, name, is_group FROM chats WHERE name = ''
+		OR name = substr(jid, 1, instr(jid, '@') - 1)
+		OR (is_group = 1 AND name = 'Group ' || substr(jid, 1, instr(jid, '@') - 1))`)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +261,24 @@ func (s *Store) GetChat(jid string) (Chat, error) {
 		Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived)
 	c.IsGroup = isGroup == 1
 	c.Archived = archived == 1
+	c.Name = displayName(c)
 	return c, err
+}
+
+// groupPlaceholder names a group until its real name arrives.
+func groupPlaceholder(user string) string {
+	return "Group " + user
+}
+
+// displayName fills in a placeholder for a group the bridge could not name
+// yet. Only the editor sees it; the store keeps the name empty so the next
+// RefreshNames asks again.
+func displayName(c Chat) string {
+	if c.Name == "" && c.IsGroup {
+		user, _, _ := strings.Cut(c.JID, "@")
+		return groupPlaceholder(user)
+	}
+	return c.Name
 }
 
 func (s *Store) ListChats() ([]Chat, error) {
@@ -279,6 +301,7 @@ func (s *Store) ListChats() ([]Chat, error) {
 		}
 		c.IsGroup = isGroup == 1
 		c.Archived = archived == 1
+		c.Name = displayName(c)
 		out = append(out, c)
 	}
 	return out, rows.Err()
