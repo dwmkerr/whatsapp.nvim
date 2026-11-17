@@ -124,9 +124,27 @@ return function()
   check(splash_has("chat settings out of sync"), "other collections are not called read marks")
   events["appstate.synced"]({ name = "regular_high" })
 
+  -- Startup replays missed messages; the list shows progress in its winbar
+  -- and redraws once per burst instead of once per message.
+  local function list_bar() return vim.wo[S.wins.list].winbar end
+  local was_synced = S.synced
+  S.synced = false
+  events["sync.progress"]({ percent = 34 })
+  check(list_bar():find("syncing 34%%", 1, true) ~= nil and splash_has("syncing history · 34%"), "sync progress shows in the list winbar and the splash")
+  local list_mod = require("whatsapp.ui.list")
+  local renders, list_render = 0, list_mod.render
+  list_mod.render = function(...) renders = renders + 1; return list_render(...) end
+  for _ = 1, 50 do events["chats.changed"]() end
+  check(renders == 0, "a burst of changes does not redraw the list at once")
+  events["sync.done"]()
+  check(wait_for(function() return renders >= 1 end) and list_bar():find("syncing", 1, true) == nil, "sync done redraws the list and clears the progress")
+  check(wait_for(function() return false end, 1300) == false and renders <= 2, "the burst collapsed into one redraw: " .. renders)
+  list_mod.render = list_render
+  S.synced = was_synced
+
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
-  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil, "filter line names every filter")
+  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil and list_lines[1]:find("Archived", 1, true) ~= nil, "filter line names every filter")
   check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
   check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
 
@@ -144,6 +162,9 @@ return function()
   check(list.jid_under_cursor() == nil, "filter line has no chat")
   vim.api.nvim_set_current_win(S.wins.list)
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+  check(S.filter == "archived" and vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no archived chats", 1, true) ~= nil, "<CR> on the filter line cycles to archived, empty here")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
   check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all")
   S.filter = "groups"
   list.render()
@@ -152,13 +173,55 @@ return function()
   S.chat_by_jid["111@s.whatsapp.net"].unread = 0
   list.render()
   check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no unread chats", 1, true) ~= nil, "empty filter says so")
+  S.current = "111@s.whatsapp.net"
+  list.render()
+  check(list.jid_under_cursor() == "111@s.whatsapp.net", "the open chat stays under the unread filter once read")
+  S.current = nil
   S.chat_by_jid["111@s.whatsapp.net"].unread = 2
   S.filter = "all"
+  list.render()
+  vim.api.nvim_win_set_cursor(S.wins.list, { 3, 0 })
+  S.chats[1], S.chats[2] = S.chats[2], S.chats[1]
+  list.render()
+  check(list.jid_under_cursor() == "222@g.us", "cursor follows its chat when the list reorders")
+  S.chats[1], S.chats[2] = S.chats[2], S.chats[1]
   list.render()
   vim.api.nvim_win_set_cursor(S.wins.list, { 3, 0 })
   list.next_unread()
   check(S.current == "111@s.whatsapp.net" and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "u wraps to the unread chat past the filter line")
   S.current = nil
+
+  -- Archived chats only show under their own filter and stay out of every
+  -- count, so a busy archived group cannot bury the chats that matter.
+  local chat_ui = require("whatsapp.ui.chat")
+  local before_chats = S.chats
+  local with_archived = vim.deepcopy(before_chats)
+  for _, c in ipairs(with_archived) do
+    c.unread = c.jid == "111@s.whatsapp.net" and 2 or 0
+  end
+  S.set_chats(vim.list_extend(with_archived, {
+    { jid = "333@g.us", name = "Five-a-side", is_group = true, last_ts = 1760500000, unread = 39, archived = true },
+  }))
+  list.render()
+  local rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(#rows == 3 and not table.concat(rows, "\n"):find("Five-a-side", 1, true), "all leaves archived chats out")
+  check(list_bar():find("1 unread", 1, true) ~= nil, "winbar unread count leaves archived chats out: " .. list_bar())
+  chat_ui.render()
+  check(splash_has("2 chats · 1 unread"), "splash counts leave archived chats out")
+  S.filter = "groups"
+  list.render()
+  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "groups leaves archived groups out")
+  S.filter = "unread"
+  list.render()
+  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "unread leaves archived chats out")
+  S.filter = "archived"
+  list.render()
+  rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
+  check(#rows == 2 and rows[2]:find("Five-a-side", 1, true) ~= nil and list.jid_under_cursor() == "333@g.us", "archived filter lists only archived chats")
+  S.filter = "all"
+  S.set_chats(before_chats)
+  list.render()
+  chat_ui.render()
 
   wa.open_chat("111@s.whatsapp.net")
   check(wait_for(function() return S.messages["111@s.whatsapp.net"] ~= nil end), "messages loaded")
@@ -311,6 +374,50 @@ return function()
   check(#pl == 2 and pl[1][2][2] == "WhatsAppImage7" and vim.fn.strchars(pl[1][2][1]) == 9, "placeholder_lines builds a cells x rows grid")
   check(vim.fn.hlexists("WhatsAppImage7") == 1, "placeholder highlight carries the image id")
   check(images.kitty_cmd({ a = "T", i = 5 }, "x") == "\27_Ga=T,i=5;x\27\\", "kitty_cmd formats an APC command")
+  local chunks = images.kitty_chunks({ a = "T", i = 5, q = 2 }, string.rep("x", 3073))
+  check(#chunks == 2 and vim.startswith(chunks[1], "\27_Ga=T,i=5,m=1,q=2;") and #chunks[1] == 4096 + #"\27_Ga=T,i=5,m=1,q=2;\27\\"
+    and vim.startswith(chunks[2], "\27_Gm=0,q=2;"), "kitty_chunks splits at 4096 and keeps keys on the first chunk only")
+  do
+    local client = require("whatsapp.client")
+    local real, calls = client.request, {}
+    client.request = function(method, params, cb)
+      if method ~= "media.download" then
+        return real(method, params, cb)
+      end
+      calls[#calls + 1] = { id = params.id, cb = cb }
+    end
+    local prev = S.current
+    S.current = "auto@s.whatsapp.net"
+    local old = { id = "p1", chat_jid = S.current, media_type = "image", ts = 1 }
+    local new = { id = "p2", chat_jid = S.current, media_type = "sticker", ts = 2 }
+    images.auto_download(old)
+    images.auto_download(new)
+    images.auto_download({ id = "v1", chat_jid = S.current, media_type = "voice", ts = 3 })
+    images.auto_download({ id = "p3", chat_jid = S.current, media_type = "image", ts = 4, cached = true })
+    vim.wait(200, function() return #calls > 0 end, 10)
+    check(#calls == 1 and calls[1].id == "p2", "auto download starts with the newest picture, one at a time")
+    calls[1].cb(nil, { path = "/nonexistent/p2.webp" })
+    vim.wait(200, function() return #calls > 1 end, 10)
+    check(#calls == 2 and calls[2].id == "p1" and new.cached, "the next picture follows once the first lands")
+    calls[2].cb("boom")
+    images.auto_download(old)
+    vim.wait(100, function() return #calls > 2 end, 10)
+    check(#calls == 2, "no retry after a failure, and voice notes and cached pictures are never fetched")
+    client.request = real
+    S.current = prev
+    vim.wait(150)
+  end
+  check(images.shrink_to(1512, 2016, 405, nil) == 540 and images.shrink_to(1512, 2016, 405, 360) == 360,
+    "shrink_to bounds the longest side by the width, or by the whole box when fitting")
+  check(images.shrink_to(300, 200, 405, 360) == nil, "shrink_to leaves a picture that already fits")
+  check(images.near_view(10, 10, 40) and images.near_view(43, 10, 40) and not images.near_view(44, 10, 40)
+    and not images.near_view(6, 10, 40), "near_view keeps a few lines of slack around the window")
+  images.client_changed("ttys001 100")
+  check(images.client_changed("ttys001 100") == false
+    and images.client_changed("ttys010 200") == true and images.client_changed("ttys010 200") == false,
+    "client_changed fires only when tmux hands Neovim another terminal")
+  local one = images.kitty_chunks({ a = "T" }, "png")
+  check(#one == 1 and one[1] == "\27_Ga=T,m=0;" .. vim.base64.encode("png") .. "\27\\", "small payload is one final chunk")
   check(images.wrap_tmux("\27_Ga=T\27\\") == "\27Ptmux;\27\27_Ga=T\27\27\\\27\\", "wrap_tmux doubles inner escapes")
   check(images.terminal_supports_kitty({ TERM_PROGRAM = "ghostty" }) and images.terminal_supports_kitty({ KITTY_WINDOW_ID = "1" })
     and not images.terminal_supports_kitty({ TERM_PROGRAM = "iTerm.app", TERM = "xterm-256color" }), "terminal detection reads the environment")

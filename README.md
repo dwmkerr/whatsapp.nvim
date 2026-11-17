@@ -45,7 +45,7 @@ The list of chats is shown on the left. Threads with unread messages are shown i
 
 - `<CR>` opens the chat under the cursor, `i` opens it and starts composing
 - `u` jumps to the next unread chat
-- `f` cycles the filter on the line under the title: all, unread, groups (`<CR>` on that line does the same)
+- `f` cycles the filter on the line under the title: all, unread, groups, archived (`<CR>` on that line does the same)
 - `gU` / `gu` / `~` mark unread / read / toggle, mirrored to your phone (as a reminder, think of read as lowercase and unread as uppercase)
 - `<Tab>` / `<S-Tab>` cycle between the list, the conversation and the compose pane
 - `R` replies to the message under the cursor, `r` reacts to it
@@ -67,7 +67,7 @@ Please be careful. If someone has sent something malicious then in the worst cas
 
 **Images**
 
-In a terminal that speaks the Kitty graphics protocol, such as Ghostty or kitty, pictures show inside their bubble. `<CR>` then `View` zooms one to fill the pane, `q` brings the chat back. Elsewhere you get the tag line and `gx` opens the file. The default detects which you have; see [Configuration](./docs/configuration.md#images) for the `images` options.
+In a terminal that speaks the Kitty graphics protocol, such as Ghostty or kitty, pictures show inside their bubble. `<CR>` then `View` zooms one to fill the pane, `q` brings the chat back. Elsewhere you get the tag line and `gx` opens the file. The default detects which you have; see [Configuration](./docs/configuration.md#images) for the `images` options. Pictures also work over SSH; see [Remote and tmux](./docs/configuration.md#remote-and-tmux).
 
 ![Picture inside its bubble in Ghostty](./docs/images.png)
 

@@ -15,6 +15,7 @@ end
 local defaults = {
   bin = nil, -- defaults to <plugin>/bin/wa-bridge
   store = vim.fn.stdpath("data") .. "/whatsapp",
+  fixture = nil, -- path to a synthetic account to replay instead of connecting, see docs/development.md
   list_width = 32,
   unread_count = false, -- show how many messages are unread, left of the time
   compose_height = 3,
@@ -28,6 +29,7 @@ local defaults = {
     max_width = 60, -- cells; pictures fill the bubble up to this
     max_height = 20, -- rows, also capped at half the pane
     crop = true, -- centre-crop pictures taller than max_height rather than shrink them
+    auto_download = true, -- fetch pictures and stickers in the open chat as they show
   },
 }
 
@@ -192,6 +194,7 @@ local function wire_events()
   end)
   client.on("sync.progress", function(d)
     S.sync = d
+    list.update_bar()
     if not S.current then
       chat.render()
     end
@@ -199,6 +202,7 @@ local function wire_events()
   client.on("sync.done", function()
     S.synced = true
     S.sync = nil
+    M.refresh_chats()
     if S.just_paired then
       S.just_paired = false
       notify("history synced")
@@ -222,7 +226,7 @@ local function wire_events()
     chat.render()
   end)
   client.on("chats.changed", function()
-    M.refresh_chats()
+    M.refresh_chats_soon()
   end)
   client.on("typing", function(d)
     if d.chat ~= S.current then
@@ -254,7 +258,7 @@ local function wire_events()
       -- Messages replayed at startup are already marked unread in the list.
       queue_notification(d.chat_name)
     end
-    M.refresh_chats()
+    M.refresh_chats_soon()
   end)
   client.on("fatal", function(d)
     S.fatal = d.error
@@ -347,7 +351,27 @@ function M.focus_next(dir)
   vim.api.nvim_set_current_win(S.wins[nxt])
 end
 
+-- Coalesce bursts into one list redraw. At startup the bridge replays every
+-- missed message and each one changes the list; redrawing per message
+-- made the rows flicker. While a sync reports progress, redraw at most
+-- once a second and let the winbar show how far it is.
+local refresh_timer
+function M.refresh_chats_soon()
+  if refresh_timer then
+    return
+  end
+  refresh_timer = vim.defer_fn(function()
+    refresh_timer = nil
+    M.refresh_chats()
+  end, S.sync_percent() and 1000 or 150)
+end
+
 function M.refresh_chats()
+  if refresh_timer then
+    refresh_timer:stop()
+    refresh_timer:close()
+    refresh_timer = nil
+  end
   client.request("chats.list", nil, function(err, chats)
     if err then
       notify(err, vim.log.levels.ERROR)
@@ -651,7 +675,7 @@ function M.media_menu(m)
   local items = {}
   local images = require("whatsapp.ui.images")
   -- Zoom first, so <CR><CR> on a picture is the quick look.
-  if m.media_type == "image" and images.mode() == "kitty" then
+  if images.drawable(m) and images.mode() == "kitty" then
     items[#items + 1] = { "View", function()
       if m.path then
         M.view_image(m)
@@ -754,6 +778,12 @@ local function build_layout()
   vim.api.nvim_win_set_buf(S.wins.list, list.ensure_buf())
   apply_win_opts("list")
 
+  require("whatsapp.ui.images").client_changed()
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    callback = function()
+      require("whatsapp.ui.images").send_visible()
+    end,
+  })
   vim.api.nvim_create_autocmd({ "WinEnter", "InsertEnter", "InsertLeave", "FocusGained", "FocusLost" }, {
     callback = function(ev)
       local w = vim.api.nvim_get_current_win()
@@ -764,8 +794,17 @@ local function build_layout()
       end
       if ev.event == "FocusLost" then
         set_presence(false)
-      elseif ev.event == "FocusGained" and S.current and S.layout_valid() then
-        set_presence(true)
+      elseif ev.event == "FocusGained" then
+        -- Focus is the only signal that the terminal may have changed
+        -- under us; a new terminal holds none of the pictures.
+        local images = require("whatsapp.ui.images")
+        if images.client_changed() then
+          images.forget_sent()
+        end
+        if S.current and S.layout_valid() then
+          set_presence(true)
+          chat.render()
+        end
       end
     end,
   })
@@ -799,7 +838,7 @@ function M.open()
     S.out_of_sync = {}
     S.synced = false
     S.sync = nil
-    if not client.start(S.opts.bin, S.opts.store) then
+    if not client.start(S.opts.bin, S.opts.store, S.opts.fixture) then
       return
     end
   end

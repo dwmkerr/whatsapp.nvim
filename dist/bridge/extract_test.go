@@ -49,6 +49,28 @@ func TestExtractSkipsProtocolNoise(t *testing.T) {
 	if !extract(nil).Skip {
 		t.Fatal("nil should be skipped")
 	}
+	if !extract(&waE2E.Message{AlbumMessage: &waE2E.AlbumMessage{ExpectedImageCount: proto.Uint32(2)}}).Skip {
+		t.Fatal("album header should be skipped")
+	}
+}
+
+func TestStoredAlbumHeaderIsHidden(t *testing.T) {
+	album, _ := proto.Marshal(&waE2E.Message{AlbumMessage: &waE2E.AlbumMessage{ExpectedImageCount: proto.Uint32(2)}})
+	unknown, _ := proto.Marshal(&waE2E.Message{})
+	s := newTestStore(t)
+	must(t, insert(s, Message{ID: "h", ChatJID: "x", Text: unsupportedText, TS: 1, raw: album}))
+	must(t, insert(s, Message{ID: "u", ChatJID: "x", Text: unsupportedText, TS: 2, raw: unknown}))
+	must(t, insert(s, Message{ID: "t", ChatJID: "x", Text: "hi", TS: 3}))
+	msgs, err := (&WA{store: s}).ListMessages("x", 10, 0)
+	must(t, err)
+	if len(msgs) != 2 || msgs[0].ID != "u" || msgs[1].ID != "t" {
+		t.Fatalf("got %+v", msgs)
+	}
+}
+
+func insert(s *Store, m Message) error {
+	_, err := s.InsertMessage(m)
+	return err
 }
 
 func TestMediaMIMECannotChooseAnotherFileType(t *testing.T) {

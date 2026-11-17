@@ -35,6 +35,8 @@ type WA struct {
 	pairing       sync.Mutex
 	names         sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone      bool
+	fixture       bool // replaying a synthetic account, see fixture.go
+	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
 	appStateMu    sync.Mutex
@@ -81,7 +83,7 @@ func (w *WA) Paired() bool { return w.cli.Store.ID != nil }
 func (w *WA) Status() map[string]interface{} {
 	return map[string]interface{}{
 		"paired":    w.Paired(),
-		"connected": w.cli.IsConnected(),
+		"connected": w.cli.IsConnected() || w.fixture,
 		"logged_in": w.cli.IsLoggedIn(),
 		"synced":    w.syncDone,
 		"store":     w.dir,
@@ -163,6 +165,11 @@ func (w *WA) Logout(ctx context.Context) error {
 	if !w.Paired() {
 		return errors.New("not paired")
 	}
+	if w.fixture {
+		_ = w.store.Reset()
+		w.out.Emit("logged_out", map[string]string{"reason": "user"})
+		return nil
+	}
 	remoteErr := w.cli.Logout(ctx)
 	if remoteErr != nil {
 		w.cli.Disconnect()
@@ -194,6 +201,12 @@ func (w *WA) handleEvent(evt interface{}) {
 		for _, name := range w.appStateWaiting() {
 			w.requestAppStateRecovery(name)
 		}
+		// Cleared here rather than after the fetch, so a reconnect while
+		// it runs does not start a second one.
+		if w.store.ArchiveUnknown && !w.fixture {
+			w.store.ArchiveUnknown = false
+			go w.learnArchive()
+		}
 	case *events.AppStateSyncError:
 		w.resyncAppState(v)
 	case *events.Disconnected:
@@ -217,13 +230,22 @@ func (w *WA) handleEvent(evt interface{}) {
 			"state":       string(v.State),
 			"media":       string(v.Media),
 		})
+	case *events.OfflineSyncPreview:
+		w.offline.start(v.Messages)
+		if v.Messages > 0 {
+			w.out.Emit("sync.progress", map[string]int{"percent": 0})
+		}
 	case *events.Message:
+		if p, ok := w.offline.step(); ok {
+			w.out.Emit("sync.progress", map[string]int{"percent": p})
+		}
 		w.handleMessage(v, true)
 	case *events.HistorySync:
 		w.handleHistorySync(v)
 	case *events.Receipt:
 		w.handleReceipt(v)
 	case *events.OfflineSyncCompleted:
+		w.offline.start(0)
 		w.syncDone = true
 		w.out.Emit("sync.done", map[string]int{"count": v.Count})
 		w.RefreshNames(context.Background())
@@ -250,6 +272,13 @@ func (w *WA) handleEvent(evt interface{}) {
 		} else {
 			_ = w.store.SetUnread(jid, 1)
 		}
+		w.out.Emit("chats.changed", nil)
+	case *events.Archive:
+		// Unlike read marks, a full sync is the useful case here: it is a
+		// snapshot of which chats are archived now, and history sync only
+		// covers the chats it sends.
+		chat := w.canonical(context.Background(), v.JID, types.EmptyJID).String()
+		_ = w.store.SetArchived(chat, v.Action.GetArchived())
 		w.out.Emit("chats.changed", nil)
 	case *events.Contact:
 		jid := v.JID.ToNonAD().String()
@@ -431,6 +460,9 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 			w.handleMessage(parsed, false)
 			count++
 		}
+		if conv.GetArchived() {
+			_ = w.store.SetArchived(w.canonical(context.Background(), jid, types.EmptyJID).String(), true)
+		}
 		// The phone's unread state only arrives with the sync; without it
 		// every chat looks read until a new message lands.
 		if n := int(conv.GetUnreadCount()); n > 0 || conv.GetMarkedAsUnread() {
@@ -442,7 +474,11 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 		}
 	}
 	w.log.Infof("history sync %s: %d conversations, %d messages, %d unread", evt.Data.GetSyncType(), len(evt.Data.GetConversations()), count, unread)
-	w.out.Emit("sync.progress", map[string]int{"messages": count})
+	progress := map[string]int{"messages": count}
+	if p := evt.Data.GetProgress(); p > 0 {
+		progress["percent"] = int(min(p, 100))
+	}
+	w.out.Emit("sync.progress", progress)
 	w.out.Emit("chats.changed", nil)
 }
 
@@ -501,7 +537,7 @@ func (w *WA) SendText(ctx context.Context, chatJID, text, replyTo string) (Messa
 	if err != nil {
 		return Message{}, fmt.Errorf("bad jid: %w", err)
 	}
-	if !w.cli.IsConnected() {
+	if !w.cli.IsConnected() && !w.fixture {
 		return Message{}, errors.New("not connected")
 	}
 	msg := &waE2E.Message{}
@@ -520,8 +556,10 @@ func (w *WA) SendText(ctx context.Context, chatJID, text, replyTo string) (Messa
 		}
 		msg.ExtendedTextMessage = &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}
 	}
-	resp, err := w.cli.SendMessage(ctx, chat, msg)
-	if err != nil {
+	var resp whatsmeow.SendResponse
+	if w.fixture {
+		resp = whatsmeow.SendResponse{ID: w.cli.GenerateMessageID(), Timestamp: time.Now()}
+	} else if resp, err = w.cli.SendMessage(ctx, chat, msg); err != nil {
 		return Message{}, err
 	}
 	// whatsmeow does not echo our own sends as events, so persist here.
@@ -543,6 +581,9 @@ func (w *WA) React(ctx context.Context, chatJID, msgID, emoji string) error {
 	target, err := w.store.GetMessage(chatJID, msgID)
 	if err != nil {
 		return fmt.Errorf("unknown message %s", msgID)
+	}
+	if w.fixture {
+		return nil
 	}
 	sender, _ := types.ParseJID(target.Sender)
 	_, err = w.cli.SendMessage(ctx, chat, w.cli.BuildReaction(chat, sender, types.MessageID(msgID), emoji))
@@ -605,6 +646,10 @@ func (w *WA) SetPresence(ctx context.Context, available bool) error {
 // device to the phone while that device is marked available, so without
 // the blip the phone keeps showing chats unread.
 func (w *WA) withPresence(ctx context.Context, fn func()) {
+	if w.fixture {
+		fn()
+		return
+	}
 	if err := w.cli.SendPresence(ctx, types.PresenceAvailable); err != nil {
 		w.log.Warnf("presence available: %v", err)
 	}
@@ -663,6 +708,9 @@ func (w *WA) Download(ctx context.Context, chatJID, msgID string) (string, error
 	}
 	if m.MediaType == "" || m.raw == nil {
 		return "", errors.New("not a media message")
+	}
+	if w.fixture {
+		return "", errors.New("fixture media has nothing to download")
 	}
 	var pm waE2E.Message
 	if err := proto.Unmarshal(m.raw, &pm); err != nil {
@@ -760,10 +808,29 @@ func (w *WA) ListMessages(jid string, limit int, before int64) ([]Message, error
 	if err != nil {
 		return nil, err
 	}
+	kept := msgs[:0]
 	for i := range msgs {
+		if nowSkipped(&msgs[i]) {
+			continue
+		}
 		w.decorate(&msgs[i])
+		kept = append(kept, msgs[i])
 	}
-	return msgs, nil
+	return kept, nil
+}
+
+// nowSkipped reports a row stored as unsupported whose type extract has
+// since learned to skip, such as album headers saved by older bridges.
+// Hiding them here keeps old stores clean without a migration.
+func nowSkipped(m *Message) bool {
+	if m.Text != unsupportedText || m.raw == nil {
+		return false
+	}
+	var pm waE2E.Message
+	if proto.Unmarshal(m.raw, &pm) != nil {
+		return false
+	}
+	return extract(&pm).Skip
 }
 
 func (w *WA) decorate(m *Message) {
@@ -903,4 +970,46 @@ func (w *WA) requestAppStateRecovery(name appstate.WAPatchName) {
 			w.log.Warnf("app state %s recovery request: %v", name, err)
 		}
 	}()
+}
+
+// offlineProgress turns the replay of messages missed while offline into a
+// percentage. The server announces the count first (OfflineSyncPreview),
+// then sends them one by one.
+type offlineProgress struct {
+	mu          sync.Mutex
+	total, seen int
+	last        int
+}
+
+func (o *offlineProgress) start(total int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.total, o.seen, o.last = total, 0, 0
+}
+
+// step counts one replayed message and returns the new percentage when it
+// moved, so the editor hears at most a hundred updates however long the
+// replay is.
+func (o *offlineProgress) step() (int, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.total <= 0 || o.seen >= o.total {
+		return 0, false
+	}
+	o.seen++
+	p := o.seen * 100 / o.total
+	if p == o.last {
+		return 0, false
+	}
+	o.last = p
+	return p, true
+}
+
+// learnArchive fetches the archive snapshot once for a store that predates
+// the archived column, so upgrading does not leave archived chats in the
+// list until the next re-pair. Archive actions live in regular_low.
+func (w *WA) learnArchive() {
+	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {
+		w.log.Warnf("fetch archived chats: %v", err)
+	}
 }

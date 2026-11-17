@@ -29,12 +29,38 @@ local sent = {} -- kitty id -> true once the terminal holds the image
 local passthrough_set = false
 local paths = {} -- message id -> path; message objects are rebuilt on every reopen
 local asked = {} -- message id -> true while a path request is in flight
+local tried = {} -- message id -> true once an automatic download was queued
+local queue = {} -- messages waiting for an automatic download
+local fetching = false
+local render_due = false
 local shown = "" -- signature of the placements drawn by the last render
 -- Ids are per terminal, not per Neovim, so start from the pid to keep two
 -- editors in one window apart. Kept under 2^24 to fit a 24-bit colour.
 local next_id = (vim.fn.getpid() % 4096) * 4096
 
 -- Pure helpers, exposed for tests ------------------------------------------
+
+-- Longest side, in pixels, that a w x h picture needs to fill box_w x
+-- box_h (box_h nil: width only, the crop takes the rest), or nil when it
+-- is already no bigger. Over SSH every byte crosses the network, and a
+-- phone photo is several times the pixels a chat bubble can show.
+function M.shrink_to(w, h, box_w, box_h)
+  local s = box_w / w
+  if box_h then
+    s = math.min(s, box_h / h)
+  end
+  if s >= 1 then
+    return nil
+  end
+  return math.max(1, math.ceil(math.max(w, h) * s))
+end
+
+-- Whether a picture anchored at buffer line `anchor` can be on screen
+-- when the window shows lines top..bot. The rows hang just above or below
+-- the anchor, so a few lines of slack cover both and the scroll ahead.
+function M.near_view(anchor, top, bot)
+  return anchor >= top - 3 and anchor <= bot + 3
+end
 
 -- Cells for a w x h pixel image inside max_cols x max_rows, keeping the
 -- aspect. cell_w / cell_h are pixels per cell.
@@ -109,6 +135,19 @@ function M.kitty_cmd(opts, payload)
   return "\27_G" .. table.concat(parts, ",") .. (payload and (";" .. payload) or "") .. "\27\\"
 end
 
+-- The protocol caps one escape's payload at 4096 base64 bytes. Only the
+-- first chunk carries the keys; later ones say whether more follow.
+function M.kitty_chunks(opts, data)
+  local b64 = vim.base64.encode(data)
+  local size, out = 4096, {}
+  for i = 1, math.max(#b64, 1), size do
+    local more = i + size <= #b64 and 1 or 0
+    local o = #out == 0 and vim.tbl_extend("force", opts, { m = more }) or { m = more, q = opts.q }
+    out[#out + 1] = M.kitty_cmd(o, b64:sub(i, i + size - 1))
+  end
+  return out
+end
+
 -- tmux only forwards escapes it is told to ignore; the wrapper doubles the
 -- inner escapes so tmux's own parser skips them.
 function M.wrap_tmux(data)
@@ -145,13 +184,17 @@ local function find_converter()
     local bin = vim.fn.executable("magick") == 1 and "magick" or "convert"
     return {
       name = bin,
-      png = function(src, dst) return { bin, src, "png:" .. dst } end,
+      -- [0] takes the first frame; an animated sticker would otherwise
+      -- become one numbered PNG per frame and none at dst.
+      png = function(src, dst) return { bin, src .. "[0]", "png:" .. dst } end,
+      shrink = function(src, dst, px) return { bin, src, "-resize", px .. "x" .. px, "png:" .. dst } end,
     }
   end
   if vim.fn.executable("sips") == 1 then
     return {
       name = "sips",
       png = function(src, dst) return { "sips", "-s", "format", "png", src, "--out", dst } end,
+      shrink = function(src, dst, px) return { "sips", "-Z", tostring(px), src, "--out", dst } end,
     }
   end
   return nil
@@ -225,13 +268,23 @@ local function transmit(entry)
   if sent[entry.id] then
     return
   end
+  local f = io.open(entry.png, "rb")
+  if not f then
+    return
+  end
+  local data = f:read("*a")
+  f:close()
   sent[entry.id] = true
-  -- t=f hands the terminal a path, so no chunking and no base64 of pixels.
-  local opts = { a = "T", f = 100, t = "f", U = 1, q = 2, i = entry.id, c = entry.cols, r = entry.rows }
+  -- Send the bytes, not a path: over SSH the terminal runs on another
+  -- machine and cannot open this cache.
+  local opts = { a = "T", f = 100, t = "d", U = 1, q = 2, i = entry.id, c = entry.cols, r = entry.rows }
   if entry.crop then
     opts.x, opts.y, opts.w, opts.h = entry.crop.x, entry.crop.y, entry.crop.w, entry.crop.h
   end
-  write(M.kitty_cmd(opts, vim.base64.encode(entry.png)))
+  -- Each chunk is its own escape, so tmux gets one passthrough per chunk.
+  for _, cmd in ipairs(M.kitty_chunks(opts, data)) do
+    write(cmd)
+  end
 end
 
 -- Conversion -----------------------------------------------------------------
@@ -252,58 +305,76 @@ local function read_file(path)
   return data
 end
 
--- PNG for src, converting once into the cache dir. cb(png, w, h), or
--- cb(nil) when the file cannot be read or converted.
-local function to_png(src, cb)
-  local dst, cmd
-  if src:lower():match("%.png$") then
-    dst = src
-  else
-    dst = cache_dir() .. "/" .. vim.fn.sha256(src):sub(1, 16) .. ".png"
-    if not read_file(dst) then
-      cmd = converter.png(src, dst)
-    end
+local function run(cmd, done)
+  vim.system(cmd, { text = false }, function(res)
+    vim.schedule(function() done(res.code == 0) end)
+  end)
+end
+
+local function png_dims(path)
+  local data = read_file(path)
+  if data then
+    return M.png_size(data)
   end
-  local function finish()
-    local data = read_file(dst)
-    local w, h
-    if data then
-      w, h = M.png_size(data)
-    end
+  return nil
+end
+
+-- PNG for src, converting once into the cache dir and scaled down to the
+-- pixels box_w x box_h can show (see shrink_to). cb(png, w, h), or cb(nil)
+-- when the file cannot be read or converted. Always calls back later:
+-- callers call this from a render and re-render on completion, which must
+-- not nest inside the first one.
+local function to_png(src, box_w, box_h, cb)
+  local key = vim.fn.sha256(src):sub(1, 16)
+  local base = src:lower():match("%.png$") and src or (cache_dir() .. "/" .. key .. ".png")
+  local function sized()
+    local w, h = png_dims(base)
     if not w then
-      cb(nil)
-    else
-      cb(dst, w, h)
+      return cb(nil)
     end
+    local px = M.shrink_to(w, h, box_w, box_h)
+    if not px then
+      return cb(base, w, h)
+    end
+    local small = cache_dir() .. "/" .. key .. "-" .. px .. ".png"
+    local function done()
+      local sw, sh = png_dims(small)
+      if sw then
+        cb(small, sw, sh)
+      else
+        cb(base, w, h)
+      end
+    end
+    if png_dims(small) then
+      return done()
+    end
+    run(converter.shrink(base, small, px), done)
   end
-  if not cmd then
-    -- Always deliver later: callers call this from a render and re-render
-    -- on completion, which must not nest inside the first one.
-    vim.schedule(finish)
+  if png_dims(base) then
+    vim.schedule(sized)
     return
   end
-  vim.system(cmd, { text = false }, function(res)
-    vim.schedule(function()
-      if res.code ~= 0 then
-        cb(nil)
-      else
-        finish()
-      end
-    end)
+  run(converter.png(src, base), function(ok)
+    if ok then
+      sized()
+    else
+      cb(nil)
+    end
   end)
 end
 
 -- Start preparing an image for the chat; re-render when it is ready.
-local function prepare(src, jid, max_cols, max_rows)
+local function prepare(src, jid, max_cols, max_rows, no_crop)
   local entry = { state = "pending", max_cols = max_cols, max_rows = max_rows }
   cache[src] = entry
-  to_png(src, function(png, w, h)
+  local cw, ch = cell_size()
+  local fit = no_crop or S.opts.images.crop == false
+  to_png(src, max_cols * cw, fit and max_rows * ch or nil, function(png, w, h)
     if not png then
       entry.state = "failed"
       return
     end
-    local cw, ch = cell_size()
-    if S.opts.images.crop == false then
+    if fit then
       entry.cols, entry.rows = M.fit(w, h, max_cols, max_rows, cw, ch)
     else
       entry.cols, entry.rows, entry.crop = M.fit_fill(w, h, max_cols, max_rows, cw, ch)
@@ -321,14 +392,33 @@ end
 -- Rendering ------------------------------------------------------------------
 
 local placed = {}
+local hung = {} -- { entry, anchor } for each picture hung by the last render
 function M.clear(buf)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   placed = {}
+  hung = {}
+end
+
+-- Send the pictures the chat window can show. The rest wait for a scroll:
+-- a long chat holds dozens of photos, and over SSH sending them all at
+-- once stalls the editor for seconds.
+function M.send_visible()
+  if not S.win_valid("chat") then
+    return
+  end
+  local win = S.wins.chat
+  local top, bot = vim.fn.line("w0", win), vim.fn.line("w$", win)
+  for _, h in ipairs(hung) do
+    if M.near_view(h.anchor, top, bot) then
+      transmit(h.entry)
+    end
+  end
 end
 
 -- After a render: when the set of pictures on screen changed, cells that
 -- held placeholders need a repaint the terminal will not do by itself.
 function M.commit()
+  M.send_visible()
   table.sort(placed)
   local sig = table.concat(placed, ";")
   if sig ~= shown then
@@ -340,10 +430,90 @@ function M.commit()
   end
 end
 
+local STICKER_COLS, STICKER_ROWS = 16, 8
+
+-- Media the plugin can draw as a picture.
+function M.drawable(m)
+  return m.media_type == "image" or m.media_type == "sticker"
+end
+
+-- Automatic downloads ------------------------------------------------------
+
+-- Many pictures finishing close together would otherwise re-render the
+-- chat once each.
+local function render_soon()
+  if render_due then
+    return
+  end
+  render_due = true
+  vim.defer_fn(function()
+    render_due = false
+    require("whatsapp.ui.chat").render()
+  end, 100)
+end
+
+-- One download at a time: the bridge runs two at most and refuses a third,
+-- so this leaves a slot for a download the user asks for.
+local function pump()
+  if fetching then
+    return
+  end
+  -- Only the open chat; the rest are forgotten so they queue again when
+  -- that chat is next opened.
+  local keep = {}
+  for _, m in ipairs(queue) do
+    if m.chat_jid == S.current then
+      keep[#keep + 1] = m
+    else
+      tried[m.id] = nil
+    end
+  end
+  queue = keep
+  if #queue == 0 then
+    return
+  end
+  -- Newest first: the chat opens at the bottom, so those are on screen.
+  table.sort(queue, function(a, b) return (a.ts or 0) < (b.ts or 0) end)
+  local m = table.remove(queue)
+  fetching = true
+  client.request("media.download", { jid = m.chat_jid, id = m.id }, function(err, res)
+    fetching = false
+    if err and tostring(err):find("in progress", 1, true) then
+      -- A manual download holds the other slot; try again shortly.
+      table.insert(queue, m)
+      vim.defer_fn(pump, 1000)
+      return
+    end
+    if not err and res and res.path then
+      paths[m.id] = res.path
+      m.path = res.path
+      m.cached = true
+      if S.current == m.chat_jid then
+        render_soon()
+      end
+    end
+    pump()
+  end)
+end
+
+-- Queue m for download when the options ask for pictures to arrive on
+-- their own. Each message is tried once per session, so a failure never
+-- loops.
+function M.auto_download(m)
+  if not S.opts.images.auto_download or m.cached or m.path or tried[m.id] or not M.drawable(m) then
+    return
+  end
+  tried[m.id] = true
+  queue[#queue + 1] = m
+  -- After the render that queued it, so the whole screen is queued and
+  -- the newest goes first.
+  vim.schedule(pump)
+end
+
 -- The converted entry for m fitted to max_cols, starting conversion (or a
 -- refit after a resize) when there is none. nil until it is ready.
 local function entry_for(m, max_cols, max_rows)
-  if M.mode() == "tag" or m.media_type ~= "image" then
+  if M.mode() == "tag" or not M.drawable(m) then
     return nil
   end
   if m.path then
@@ -371,9 +541,16 @@ local function entry_for(m, max_cols, max_rows)
   end
   max_cols = math.max(1, math.min(S.opts.images.max_width, max_cols))
   max_rows = math.max(1, math.min(S.opts.images.max_height, max_rows))
+  local sticker = m.media_type == "sticker"
+  if sticker then
+    -- The phone draws stickers small; a 512px square sticker at this cap
+    -- is about the size of a short message, never a photo.
+    max_cols, max_rows = math.min(max_cols, STICKER_COLS), math.min(max_rows, STICKER_ROWS)
+  end
   local entry = cache[m.path]
   if not entry or (entry.state ~= "pending" and (entry.max_cols ~= max_cols or entry.max_rows ~= max_rows)) then
-    prepare(m.path, m.chat_jid, max_cols, max_rows)
+    -- A sticker is a cut-out shape; cropping would cut it.
+    prepare(m.path, m.chat_jid, max_cols, max_rows, sticker)
     return nil
   end
   return entry.state == "ready" and entry or nil
@@ -396,7 +573,7 @@ function M.place(buf, anchor, indent, m, max_cols, max_rows, box)
   if not entry then
     return
   end
-  transmit(entry)
+  hung[#hung + 1] = { entry = entry, anchor = anchor }
   local rows = M.placeholder_lines(entry.id, entry.cols, entry.rows, indent)
   if box then
     local pad = string.rep(" ", math.max(0, box.inner - entry.cols))
@@ -426,13 +603,13 @@ function M.full(m, cols, rows)
   end
   entry = { state = "pending", max_cols = cols, max_rows = rows }
   full[m.path] = entry
-  to_png(m.path, function(png, w, h)
+  local cw, ch = cell_size()
+  to_png(m.path, cols * cw, rows * ch, function(png, w, h)
     if not png then
       entry.state = "failed"
       vim.notify("WhatsApp: could not read " .. m.path, vim.log.levels.WARN)
       return
     end
-    local cw, ch = cell_size()
     entry.cols, entry.rows = M.fit(w, h, cols, rows, cw, ch)
     entry.png = png
     next_id = next_id + 1
@@ -487,6 +664,31 @@ function M.full_layout(m, width, height)
   return lines, spans
 end
 
+-- A new terminal window, or tmux reattaching from another terminal, holds
+-- none of the images sent so far; forgetting them makes the next render
+-- send them again.
+function M.forget_sent()
+  sent = {}
+end
+
+-- Whether the terminal behind Neovim is a different one from the last
+-- call. Only tmux can swap it: a client attaching from another window, or
+-- the same tty reattaching, which tmux marks with a new creation time.
+-- Focus fires on every pane switch, and resending on each one floods SSH.
+local last_client
+function M.client_changed(id)
+  if id == nil then
+    if not vim.env.TMUX then
+      return false
+    end
+    local ok, out = pcall(vim.fn.system, { "tmux", "display", "-p", "#{client_tty} #{client_created}" })
+    id = ok and vim.trim(out) or ""
+  end
+  local changed = last_client ~= nil and id ~= last_client
+  last_client = id
+  return changed
+end
+
 -- Forget transmitted images so a new session starts clean; the terminal
 -- drops them too.
 function M.reset()
@@ -498,6 +700,7 @@ function M.reset()
   full = {}
   asked = {}
   paths = {}
+  hung = {}
   shown = ""
 end
 

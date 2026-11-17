@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var version = "dev"
@@ -22,6 +24,7 @@ func main() {
 	defaultDir = filepath.Join(defaultDir, ".local", "share", "nvim", "whatsapp")
 	dir := flag.String("store", defaultDir, "directory for session and message databases")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	fixturePath := flag.String("fixture", "", "replay a synthetic account from this JSON file instead of connecting; -store is ignored")
 	flag.Parse()
 	// Everything this process creates holds private data (keys, messages, media).
 	syscall.Umask(0o077)
@@ -32,6 +35,26 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	var fx *fixture
+	cleanup := func() {}
+	if *fixturePath != "" {
+		var err error
+		if fx, err = loadFixture(*fixturePath, time.Now()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		// A throwaway store, so a replay never mixes with a real account.
+		tmp, err := os.MkdirTemp("", "wa-fixture-")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		// The signal handler exits without running defers, so it calls this too.
+		cleanup = func() { _ = os.RemoveAll(tmp) }
+		defer cleanup()
+		*dir = tmp
+	}
 
 	if err := os.MkdirAll(*dir, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -50,6 +73,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer wa.Disconnect()
+	if fx != nil {
+		if err := wa.useFixture(ctx, fx); err != nil {
+			out.Emit("fatal", map[string]string{"error": err.Error()})
+			os.Exit(1)
+		}
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -57,11 +86,14 @@ func main() {
 		<-sigs
 		cancel()
 		wa.Disconnect()
+		cleanup()
 		os.Exit(0)
 	}()
 
 	out.Emit("ready", wa.Status())
-	if err := wa.Connect(ctx); err != nil {
+	if fx != nil {
+		go wa.replay(fx, fixturePace())
+	} else if err := wa.Connect(ctx); err != nil {
 		out.Emit("error", map[string]string{"error": err.Error()})
 	}
 
@@ -185,4 +217,13 @@ func params(req Request, v interface{}) error {
 		return errors.New("missing params")
 	}
 	return json.Unmarshal(req.Params, v)
+}
+
+// fixturePace reads the delay multiplier from the environment rather than a
+// flag, so make demo reaches the bridge without the plugin passing it through.
+func fixturePace() float64 {
+	if p, err := strconv.ParseFloat(os.Getenv("WHATSAPP_FIXTURE_PACE"), 64); err == nil && p > 0 {
+		return p
+	}
+	return 1
 }

@@ -249,10 +249,11 @@ local function splash(width, height)
   elseif not S.status.connected then
     note("connecting…")
   elseif S.sync and not S.synced then
-    note("syncing history · " .. (S.sync.chats or 0) .. " chats")
+    local p = S.sync_percent()
+    note("syncing history" .. (p and (" · " .. p .. "%") or ""))
   else
-    local unread = 0
-    for _, c in ipairs(S.chats) do
+    local chats, unread = S.inbox(), 0
+    for _, c in ipairs(chats) do
       if c.unread > 0 then
         unread = unread + 1
       end
@@ -265,7 +266,7 @@ local function splash(width, height)
     key("g?", "all keys")
     key("q", "close")
     rows[#rows + 1] = {}
-    note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
+    note("connected · " .. #chats .. " chats · " .. unread .. " unread")
     local stale = S.out_of_sync_label()
     if stale then
       rows[#rows + 1] = { text = stale .. " out of sync · open WhatsApp on your phone", hl = "WarningMsg" }
@@ -400,7 +401,8 @@ function M.render(opts)
   -- the tag's indent in the lines layout. Either way above the hint.
   images.clear(buf)
   for _, e in ipairs(media_rows) do
-    if e.m.media_type == "image" then
+    images.auto_download(e.m)
+    if images.drawable(e.m) then
       if S.opts.layout == "bubbles" then
         local footer = lines[e.last] or ""
         local indent = footer:match("^%s*")

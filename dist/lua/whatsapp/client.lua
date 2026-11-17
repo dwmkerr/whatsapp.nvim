@@ -67,7 +67,7 @@ function M.running()
   return proc ~= nil
 end
 
-function M.start(bin, store_dir)
+function M.start(bin, store_dir, fixture)
   if proc then
     return true
   end
@@ -75,7 +75,11 @@ function M.start(bin, store_dir)
     vim.notify("whatsapp.nvim: bridge not found at " .. bin .. " (run make)", vim.log.levels.ERROR)
     return false
   end
-  proc = vim.system({ bin, "-store", store_dir }, {
+  local cmd = { bin, "-store", store_dir }
+  if fixture then
+    vim.list_extend(cmd, { "-fixture", fixture })
+  end
+  proc = vim.system(cmd, {
     stdin = true,
     text = true,
     stdout = on_stdout,
