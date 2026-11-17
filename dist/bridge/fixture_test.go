@@ -200,6 +200,20 @@ func TestGroupWithoutSubjectNamedAfterItsMembers(t *testing.T) {
 	}
 }
 
+func TestMembersNameReplacesAStoredPlaceholder(t *testing.T) {
+	s := newTestStore(t)
+	jid := "120363400000000011@g.us"
+	if err := s.UpsertChat(jid, "Group 120363400000000011", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetMembersName(jid, "Ada & Bram"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetChat(jid); c.Name != "Ada & Bram" {
+		t.Errorf("a placeholder saved by an older bridge gives way to the members' names: %+v", c)
+	}
+}
+
 func TestJoinNamesLikeThePhone(t *testing.T) {
 	for _, tc := range []struct {
 		in   []string

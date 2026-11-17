@@ -305,14 +305,18 @@ func groupPlaceholder(user string) string {
 // cannot name it yet. Only the editor sees either; the store keeps the name
 // empty so the next RefreshNames asks again.
 func displayName(c Chat) string {
-	if c.Name == "" && c.membersName != "" {
+	if !c.IsGroup {
+		return c.Name
+	}
+	user, _, _ := strings.Cut(c.JID, "@")
+	// Older bridges stored the placeholder as the name.
+	if c.Name != "" && c.Name != groupPlaceholder(user) {
+		return c.Name
+	}
+	if c.membersName != "" {
 		return c.membersName
 	}
-	if c.Name == "" && c.IsGroup {
-		user, _, _ := strings.Cut(c.JID, "@")
-		return groupPlaceholder(user)
-	}
-	return c.Name
+	return groupPlaceholder(user)
 }
 
 func (s *Store) ListChats() ([]Chat, error) {
