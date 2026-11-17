@@ -44,6 +44,7 @@ type Message struct {
 	Seconds        int    `json:"seconds,omitempty"`
 	Waveform       []int  `json:"waveform,omitempty"`
 	Cached         bool   `json:"cached,omitempty"`
+	Edited         bool   `json:"edited,omitempty"`
 	raw            []byte
 }
 
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS messages (
 	filename TEXT NOT NULL DEFAULT '',
 	quoted_id TEXT NOT NULL DEFAULT '',
 	raw BLOB,
+	edited INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (id, chat_jid)
 );
 CREATE INDEX IF NOT EXISTS messages_chat_ts ON messages(chat_jid, ts);
@@ -98,6 +100,10 @@ func OpenStore(path string) (*Store, error) {
 	if _, err := addColumn(db, "chats", "members_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate chats: %w", err)
+	}
+	if _, err := addColumn(db, "messages", "edited", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate messages: %w", err)
 	}
 	restrictFile(path)
 	return &Store{db: db, ArchiveUnknown: added}, nil
@@ -356,7 +362,7 @@ func (s *Store) ListMessages(jid string, limit int, beforeTS int64) ([]Message, 
 	}
 	rows, err := s.db.Query(`
 		SELECT m.id, m.chat_jid, m.sender, m.sender_name, m.text, m.ts, m.from_me, m.media_type, m.filename, m.quoted_id,
-			COALESCE((SELECT q.text FROM messages q WHERE q.id = m.quoted_id AND q.chat_jid = m.chat_jid), ''), m.raw
+			COALESCE((SELECT q.text FROM messages q WHERE q.id = m.quoted_id AND q.chat_jid = m.chat_jid), ''), m.raw, m.edited
 		FROM messages m
 		WHERE m.chat_jid = ? AND m.ts < ?
 		ORDER BY m.ts DESC LIMIT ?`, jid, beforeTS, limit)
@@ -367,12 +373,13 @@ func (s *Store) ListMessages(jid string, limit int, beforeTS int64) ([]Message, 
 	var out []Message
 	for rows.Next() {
 		var m Message
-		var fromMe int
+		var fromMe, edited int
 		if err := rows.Scan(&m.ID, &m.ChatJID, &m.Sender, &m.SenderName, &m.Text, &m.TS, &fromMe,
-			&m.MediaType, &m.Filename, &m.QuotedID, &m.QuotedText, &m.raw); err != nil {
+			&m.MediaType, &m.Filename, &m.QuotedID, &m.QuotedText, &m.raw, &edited); err != nil {
 			return nil, err
 		}
 		m.FromMe = fromMe == 1
+		m.Edited = edited == 1
 		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
@@ -389,14 +396,58 @@ func (s *Store) ListMessages(jid string, limit int, beforeTS int64) ([]Message, 
 
 func (s *Store) GetMessage(jid, id string) (Message, error) {
 	var m Message
-	var fromMe int
+	var fromMe, edited int
 	err := s.db.QueryRow(`
-		SELECT id, chat_jid, sender, sender_name, text, ts, from_me, media_type, filename, quoted_id, raw
+		SELECT id, chat_jid, sender, sender_name, text, ts, from_me, media_type, filename, quoted_id, raw, edited
 		FROM messages WHERE chat_jid = ? AND id = ?`, jid, id).
 		Scan(&m.ID, &m.ChatJID, &m.Sender, &m.SenderName, &m.Text, &m.TS, &fromMe,
-			&m.MediaType, &m.Filename, &m.QuotedID, &m.raw)
+			&m.MediaType, &m.Filename, &m.QuotedID, &m.raw, &edited)
 	m.FromMe = fromMe == 1
+	m.Edited = edited == 1
 	return m, err
+}
+
+// EditMessage replaces a message's text after its sender edited it, and
+// reports whether the message was stored.
+func (s *Store) EditMessage(jid, id, text string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE messages SET text = ?, edited = 1 WHERE chat_jid = ? AND id = ?`, text, jid, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// UnsupportedMessages lists rows stored as unsupported, for RepairUnsupported
+// to read again with a newer extract.
+func (s *Store) UnsupportedMessages() ([]Message, error) {
+	rows, err := s.db.Query(`SELECT id, chat_jid, sender, ts, from_me, raw FROM messages WHERE text = ? AND raw IS NOT NULL`, unsupportedText)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		var fromMe int
+		if err := rows.Scan(&m.ID, &m.ChatJID, &m.Sender, &m.TS, &fromMe, &m.raw); err != nil {
+			return nil, err
+		}
+		m.FromMe = fromMe == 1
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetMessageContent(jid, id, text, mediaType, filename string) error {
+	_, err := s.db.Exec(`UPDATE messages SET text = ?, media_type = ?, filename = ? WHERE chat_jid = ? AND id = ?`,
+		text, mediaType, filename, jid, id)
+	return err
+}
+
+func (s *Store) DeleteMessage(jid, id string) error {
+	_, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ? AND id = ?`, jid, id)
+	return err
 }
 
 // RecentUnreadIDs lists incoming message ids newer than the last outgoing

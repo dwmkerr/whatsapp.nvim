@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"go.mau.fi/whatsmeow/proto/waCommon"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -310,5 +312,77 @@ func TestFullSyncAppliesUnreadMarksButNotOldReadMarks(t *testing.T) {
 		Action: &waSyncAction.MarkChatAsReadAction{Read: proto.Bool(false)}})
 	if c := chatsByName(t, w)["Boulder Wednesdays"]; c.Unread != group.Unread {
 		t.Errorf("an old full-sync read mark and a live unread mark keep the real count %d: %+v", group.Unread, c)
+	}
+}
+
+func TestEditsChangeTheOriginalMessage(t *testing.T) {
+	w, out := replayFixture(t, syntheticFixture)
+	for _, tc := range []struct{ chat, id, text, form string }{
+		{"120363400000000001@g.us", "BW07", "Running 20 late, sorry", "an encrypted group edit"},
+		{"447700900101@s.whatsapp.net", "ADA04", "Also, the café opens at 8:30 now", "a plain protocol edit"},
+	} {
+		m, err := w.store.GetMessage(tc.chat, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Text != tc.text || !m.Edited {
+			t.Errorf("%s changes the original's text and marks it edited: %+v", tc.form, m)
+		}
+	}
+	if _, err := w.store.GetMessage("120363400000000001@g.us", "BW08"); err == nil {
+		t.Error("an edit is not stored as a message of its own")
+	}
+	if !strings.Contains(out.String(), `"event":"message.edited"`) {
+		t.Error("a live edit tells the editor")
+	}
+}
+
+func TestHDCopyAndNewPollsReadLikeThePhone(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	chat := "120363400000000001@g.us"
+	if _, err := w.store.GetMessage(chat, "BW15"); err == nil {
+		t.Error("the HD copy of a photo is not stored as a second photo")
+	}
+	if m, _ := w.store.GetMessage(chat, "BW16"); m.Text != "[poll] Pub after?" {
+		t.Errorf("a poll in the newest format shows its question: %+v", m)
+	}
+}
+
+func TestRepairUnsupportedRowsFromOlderBridges(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	fx, err := loadFixture(syntheticFixture, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat := types.NewJID("120363400000000001", types.GroupServer)
+	dev := types.NewJID("447700900104", types.DefaultUserServer)
+	key := func(id string) *waCommon.MessageKey {
+		return &waCommon.MessageKey{RemoteJID: proto.String(chat.String()), FromMe: proto.Bool(false), Participant: proto.String(dev.String()), ID: proto.String(id)}
+	}
+	// Rows as an older bridge stored them: unsupported text with the raw
+	// message kept.
+	for id, m := range map[string]*waE2E.Message{
+		"OLD-EDIT": fx.message(fixtureMsg{EditOf: "BW03", Text: "I'm in, 7:30?"}, key("OLD-EDIT")),
+		"OLD-HD":   fx.message(fixtureMsg{Media: "image", HDOf: "BW02"}, key("OLD-HD")),
+		"OLD-POLL": fx.message(fixtureMsg{Poll: "Same time next week?"}, key("OLD-POLL")),
+	} {
+		raw, _ := proto.Marshal(m)
+		if _, err := w.store.InsertMessage(Message{ID: id, ChatJID: chat.String(), Sender: dev.String(), Text: unsupportedText, TS: 100, raw: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := w.RepairUnsupported(context.Background()); n != 3 {
+		t.Errorf("all three rows are repaired, got %d", n)
+	}
+	if m, _ := w.store.GetMessage(chat.String(), "BW03"); m.Text != "I'm in, 7:30?" || !m.Edited {
+		t.Errorf("a stored edit is applied to the message it changes: %+v", m)
+	}
+	for _, id := range []string{"OLD-EDIT", "OLD-HD"} {
+		if _, err := w.store.GetMessage(chat.String(), id); err == nil {
+			t.Errorf("%s is removed once read", id)
+		}
+	}
+	if m, _ := w.store.GetMessage(chat.String(), "OLD-POLL"); m.Text != "[poll] Same time next week?" {
+		t.Errorf("a stored poll gets its question: %+v", m)
 	}
 }

@@ -98,6 +98,16 @@ return function()
     check(vim.fn.strdisplaywidth(l) <= 40, "bubble line fits width: " .. l)
   end
 
+  local edited = { id = "e1", chat_jid = "g", sender = "x", sender_name = "Ada", text = "Running 20 late", ts = 1760400000, from_me = false, edited = true }
+  local elines = format.conversation({ edited }, true)
+  check(elines[#elines]:match("Running 20 late edited$") ~= nil, "lines layout marks an edited message")
+  local ebubble = format.bubbles({ edited }, true, 40)
+  local efoot
+  for _, l in ipairs(ebubble) do
+    efoot = l:match("edited %d%d:%d%d") and l or efoot
+  end
+  check(efoot ~= nil, "bubble marks an edited message beside its time")
+
   -- Now the real UI against the fake bridge.
   local wa = require("whatsapp")
   wa.setup({ bin = root .. "/test/fake-bridge.sh", store = vim.fn.tempname(), notify = false, layout = "lines" })
