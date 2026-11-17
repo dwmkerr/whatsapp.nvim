@@ -35,7 +35,8 @@ type WA struct {
 	pairing       sync.Mutex
 	names         sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone      bool
-	fixture       bool // replaying a synthetic account, see fixture.go
+	fixture       bool     // replaying a synthetic account, see fixture.go
+	groupNames    sync.Map // fixture only: group jid -> name, see groupName
 	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
@@ -320,8 +321,8 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		}
 		var name string
 		if c.IsGroup {
-			if gi, err := w.cli.GetGroupInfo(ctx, jid); err == nil {
-				name = gi.Name
+			if n, err := w.groupName(ctx, jid); err == nil {
+				name = n
 			}
 		} else {
 			name = w.contactName(ctx, jid)
@@ -504,9 +505,9 @@ func (w *WA) chatName(ctx context.Context, jid types.JID, pushName string, isGro
 		return n.(string)
 	}
 	if isGroup {
-		if gi, err := w.cli.GetGroupInfo(ctx, jid); err == nil && gi.Name != "" {
-			w.names.Store(jid.String(), gi.Name)
-			return gi.Name
+		if n, err := w.groupName(ctx, jid); err == nil && n != "" {
+			w.names.Store(jid.String(), n)
+			return n
 		}
 		return "Group " + jid.User
 	}
@@ -1047,4 +1048,21 @@ func (w *WA) learnArchive() {
 	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {
 		w.log.Warnf("fetch archived chats: %v", err)
 	}
+}
+
+// groupName asks the server for a group's subject. A fixture answers from
+// its timeline instead, and fails until a group_info event, as the server
+// can for a busy or restricted group.
+func (w *WA) groupName(ctx context.Context, jid types.JID) (string, error) {
+	if w.fixture {
+		if n, ok := w.groupNames.Load(jid.String()); ok {
+			return n.(string), nil
+		}
+		return "", errors.New("no group info in the fixture yet")
+	}
+	gi, err := w.cli.GetGroupInfo(ctx, jid)
+	if err != nil {
+		return "", err
+	}
+	return gi.Name, nil
 }
