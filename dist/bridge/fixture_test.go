@@ -8,6 +8,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
+	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
+	"google.golang.org/protobuf/proto"
 )
 
 const syntheticFixture = "../test/fixtures/synthetic.json"
@@ -153,5 +158,23 @@ func TestFixtureRejectsMistakesAtLoad(t *testing.T) {
 		if _, err := loadFixture(path, time.Now()); err == nil {
 			t.Errorf("%s: want an error", name)
 		}
+	}
+}
+
+func TestFullSyncAppliesUnreadMarksButNotOldReadMarks(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	by := chatsByName(t, w)
+	if c := by["Dev Patel-Ruiz"]; c.Unread != 1 {
+		t.Errorf("a full-sync unread mark shows the chat unread: %+v", c)
+	}
+
+	group := by["Boulder Wednesdays"]
+	jid, _ := types.ParseJID(group.JID)
+	w.handleEvent(&events.MarkChatAsRead{JID: jid, FromFullSync: true,
+		Action: &waSyncAction.MarkChatAsReadAction{Read: proto.Bool(true)}})
+	w.handleEvent(&events.MarkChatAsRead{JID: jid,
+		Action: &waSyncAction.MarkChatAsReadAction{Read: proto.Bool(false)}})
+	if c := chatsByName(t, w)["Boulder Wednesdays"]; c.Unread != group.Unread {
+		t.Errorf("an old full-sync read mark and a live unread mark keep the real count %d: %+v", group.Unread, c)
 	}
 }

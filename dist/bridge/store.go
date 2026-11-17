@@ -206,6 +206,13 @@ func (s *Store) SetUnread(jid string, n int) error {
 	return err
 }
 
+// MarkUnread flags a chat unread the way the phone does: at least one
+// unread, keeping a real count that is already higher.
+func (s *Store) MarkUnread(jid string) error {
+	_, err := s.db.Exec(`UPDATE chats SET unread = MAX(unread, 1) WHERE jid = ?`, jid)
+	return err
+}
+
 // ReadUpTo lowers a chat's unread count to the incoming messages newer than
 // ts, the time of the newest message read on another device. It never
 // raises the count: a receipt only ever says that something was read.
