@@ -47,7 +47,7 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 | `read_receipt` | `chat`, `ids`, `at` | `events.Receipt` of type read from our own phone |
 | `offline_preview` | `messages` | `events.OfflineSyncPreview` |
 | `offline_done` | `messages` | `events.OfflineSyncCompleted` |
-| `group_info` | `chat`, `name`, `joined_only` | Not an event: group info requests for `chat` succeed from here on, and fail before it. With `joined_only`, only the joined-groups list names it |
+| `group_info` | `chat`, `name`, `members`, `joined_only` | Not an event: group info requests for `chat` succeed from here on, and fail before it. `members` lists participant JIDs, `"me"` for you; a group without a subject has `members` and no `name`. With `joined_only`, only the joined-groups list names it |
 
 In messages, `from` is `"me"`, a contact's JID, or empty for the other person in a direct chat; group messages need it. `media` is one of `image`, `sticker`, `voice`, `video` or `document`. Media shows as a tag and has nothing to download.
 

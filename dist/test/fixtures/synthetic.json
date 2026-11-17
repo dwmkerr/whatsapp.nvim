@@ -92,6 +92,12 @@
       "delay_ms": 600,
       "conversations": [
         {
+          "jid": "120363400000000007@g.us",
+          "messages": [
+            { "id": "NG01", "from": "447700900107@s.whatsapp.net", "text": "Made a group for the van share, didn't bother with a name", "at": "-4h" }
+          ]
+        },
+        {
           "jid": "120363400000000006@g.us",
           "messages": [
             { "id": "HS01", "from": "447700900107@s.whatsapp.net", "text": "Water's 11 degrees, still going in", "at": "-6h" }
@@ -133,6 +139,12 @@
           ]
         }
       ]
+    },
+    {
+      "type": "group_info",
+      "note": "#39: a group created without a subject. The server answers with members and an empty name; the phone names it after the members other than me, \"Ada, Bram & Gus\".",
+      "chat": "120363400000000007@g.us",
+      "members": ["447700900107@s.whatsapp.net", "me", "447700900101@s.whatsapp.net", "447700900102@s.whatsapp.net"]
     },
     {
       "type": "group_info",
