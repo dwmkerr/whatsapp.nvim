@@ -53,8 +53,8 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	w, out := replayFixture(t, syntheticFixture)
 	by := chatsByName(t, w)
 
-	if len(by) != 11 {
-		t.Fatalf("want 11 chats, got %d: %v", len(by), by)
+	if len(by) != 12 {
+		t.Fatalf("want 12 chats, got %d: %v", len(by), by)
 	}
 	if c := by["Boulder Wednesdays"]; !c.IsGroup || c.Unread != 4 {
 		t.Errorf("group keeps its name and counts the offline message: %+v", c)
@@ -157,6 +157,17 @@ func TestGroupNamedOnceTheServerAnswers(t *testing.T) {
 	}
 	if c.Name != "Ridge Walkers" {
 		t.Errorf("a group whose first lookup failed is named after the next sync: %+v", c)
+	}
+}
+
+func TestGroupNamedFromTheJoinedListWhenItsLookupFails(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	c, err := w.store.GetChat("120363400000000006@g.us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Harbour Swimmers" {
+		t.Errorf("a group whose own lookup keeps failing takes its name from the joined-groups list: %+v", c)
 	}
 }
 

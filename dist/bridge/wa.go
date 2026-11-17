@@ -37,6 +37,7 @@ type WA struct {
 	syncDone      bool
 	fixture       bool     // replaying a synthetic account, see fixture.go
 	groupNames    sync.Map // fixture only: group jid -> name, see groupName
+	joinedNames   sync.Map // fixture only: the joined-groups list, see joinedGroupNames
 	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
@@ -314,6 +315,9 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		return 0
 	}
 	changed := 0
+	// Fetched at most once per pass, and only when a group's own lookup
+	// fails: some groups never answer it but still appear in this list.
+	var joined map[string]string
 	for _, c := range chats {
 		jid, err := types.ParseJID(c.JID)
 		if err != nil {
@@ -321,9 +325,20 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		}
 		var name string
 		if c.IsGroup {
-			if n, err := w.groupName(ctx, jid); err == nil {
-				name = n
+			n, err := w.groupName(ctx, jid)
+			if err != nil {
+				if joined == nil {
+					var jerr error
+					if joined, jerr = w.joinedGroupNames(ctx); jerr != nil {
+						w.log.Warnf("joined groups: %v", jerr)
+					}
+				}
+				n = joined[c.JID]
+				if n == "" {
+					w.log.Warnf("group %s has no name yet: %v", c.JID, err)
+				}
 			}
+			name = n
 		} else {
 			name = w.contactName(ctx, jid)
 		}
@@ -1071,4 +1086,25 @@ func (w *WA) groupName(ctx context.Context, jid types.JID) (string, error) {
 		return "", err
 	}
 	return gi.Name, nil
+}
+
+// joinedGroupNames lists every group the account is in with its name, in
+// one request. A fixture answers from its timeline.
+func (w *WA) joinedGroupNames(ctx context.Context) (map[string]string, error) {
+	out := map[string]string{}
+	if w.fixture {
+		w.joinedNames.Range(func(k, v any) bool {
+			out[k.(string)] = v.(string)
+			return true
+		})
+		return out, nil
+	}
+	groups, err := w.cli.GetJoinedGroups(ctx)
+	if err != nil {
+		return out, err
+	}
+	for _, g := range groups {
+		out[g.JID.String()] = g.Name
+	}
+	return out, nil
 }

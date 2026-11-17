@@ -51,8 +51,10 @@ type fixtureName struct {
 //	read_receipt     chat, ids, at
 //	offline_preview  messages
 //	offline_done     messages
-//	group_info       chat, name: the server answers group info requests for
-//	                 chat from here on; before it, they fail, as they can live
+//	group_info       chat, name, joined_only: the server answers group info
+//	                 requests for chat from here on; before it, they fail, as
+//	                 they can live. joined_only: only the joined-groups list
+//	                 names it, the per-group request keeps failing
 type fixtureEvent struct {
 	Type    string `json:"type"`
 	Note    string `json:"note,omitempty"`     // why the event is in the dataset, e.g. the issue it reproduces
@@ -64,12 +66,13 @@ type fixtureEvent struct {
 	Chat string `json:"chat,omitempty"`
 	fixtureMsg
 
-	Read     *bool    `json:"read,omitempty"`
-	Archived *bool    `json:"archived,omitempty"`
-	FullSync bool     `json:"full_sync,omitempty"`
-	IDs      []string `json:"ids,omitempty"`
-	Name     string   `json:"name,omitempty"`
-	Messages int      `json:"messages,omitempty"`
+	Read       *bool    `json:"read,omitempty"`
+	Archived   *bool    `json:"archived,omitempty"`
+	FullSync   bool     `json:"full_sync,omitempty"`
+	IDs        []string `json:"ids,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	JoinedOnly bool     `json:"joined_only,omitempty"`
+	Messages   int      `json:"messages,omitempty"`
 }
 
 type fixtureConv struct {
@@ -360,7 +363,7 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 		if chat.Server != types.GroupServer || e.Name == "" {
 			return nil, fmt.Errorf("group_info needs a group chat and a name")
 		}
-		return &fixtureGroupInfo{JID: chat, Name: e.Name}, nil
+		return &fixtureGroupInfo{JID: chat, Name: e.Name, JoinedOnly: e.JoinedOnly}, nil
 	}
 	return nil, fmt.Errorf("unknown event type %q", e.Type)
 }
@@ -408,8 +411,9 @@ func (w *WA) useFixture(ctx context.Context, fx *fixture) error {
 // fixtureGroupInfo is not a whatsmeow event: replay keeps it as the answer
 // groupName gives from then on.
 type fixtureGroupInfo struct {
-	JID  types.JID
-	Name string
+	JID        types.JID
+	Name       string
+	JoinedOnly bool
 }
 
 func (w *WA) replay(fx *fixture, pace float64) {
@@ -424,7 +428,10 @@ func (w *WA) replay(fx *fixture, pace float64) {
 			continue
 		}
 		if gi, ok := evt.(*fixtureGroupInfo); ok {
-			w.groupNames.Store(gi.JID.String(), gi.Name)
+			w.joinedNames.Store(gi.JID.String(), gi.Name)
+			if !gi.JoinedOnly {
+				w.groupNames.Store(gi.JID.String(), gi.Name)
+			}
 			continue
 		}
 		w.handleEvent(evt)
