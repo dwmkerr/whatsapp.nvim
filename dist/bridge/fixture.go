@@ -45,7 +45,7 @@ type fixtureName struct {
 // fixtureEvent is one entry in the timeline. Type picks which fields apply:
 //
 //	history          progress, conversations
-//	message          chat, from, id, text, media, caption, reply_to, push_name, at
+//	message          chat, from, id, text, media, caption, reply_to, quoted_text, quoted_from, push_name, at
 //	mark_read        chat, read, full_sync, at
 //	archive          chat, archived, full_sync, at
 //	read_receipt     chat, ids, at
@@ -86,6 +86,10 @@ type fixtureMsg struct {
 	Caption  string `json:"caption,omitempty"`
 	Filename string `json:"filename,omitempty"`
 	ReplyTo  string `json:"reply_to,omitempty"`
+	// QuotedText and QuotedFrom put a copy of the quoted message in the
+	// reply, as the phone does, for replies to messages the store never saw.
+	QuotedText string `json:"quoted_text,omitempty"`
+	QuotedFrom string `json:"quoted_from,omitempty"`
 	PushName string `json:"push_name,omitempty"`
 	At       string `json:"at,omitempty"` // Go duration from the replay start ("-26h"), or RFC 3339
 }
@@ -151,6 +155,12 @@ func (fx *fixture) message(m fixtureMsg) *waE2E.Message {
 	var ctxInfo *waE2E.ContextInfo
 	if m.ReplyTo != "" {
 		ctxInfo = &waE2E.ContextInfo{StanzaID: proto.String(m.ReplyTo)}
+		if m.QuotedText != "" {
+			ctxInfo.QuotedMessage = &waE2E.Message{Conversation: proto.String(m.QuotedText)}
+		}
+		if m.QuotedFrom != "" {
+			ctxInfo.Participant = proto.String(m.QuotedFrom)
+		}
 	}
 	switch m.Media {
 	case "image":

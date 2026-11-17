@@ -41,7 +41,7 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 | `type` | Fields | Replays as |
 | --- | --- | --- |
 | `history` | `progress`, `conversations` | `events.HistorySync`, one chunk of the sync after pairing |
-| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `push_name`, `at` | `events.Message`, live or replayed from offline |
+| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `quoted_text`, `quoted_from`, `push_name`, `at` | `events.Message`, live or replayed from offline |
 | `mark_read` | `chat`, `read`, `full_sync`, `at` | `events.MarkChatAsRead`, the phone's mark read or unread |
 | `archive` | `chat`, `archived`, `full_sync`, `at` | `events.Archive` |
 | `read_receipt` | `chat`, `ids`, `at` | `events.Receipt` of type read from our own phone |

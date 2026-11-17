@@ -18,7 +18,7 @@
   "events": [
     {
       "type": "history",
-      "note": "First history chunk after pairing: everyday chats with unread counts from the phone.",
+      "note": "First history chunk after pairing: everyday chats with unread counts from the phone. #34: in Boulder Wednesdays, my reply to a document (no text to quote) and a reply to a message older than the stored history (only the copy in the reply).",
       "progress": 35,
       "delay_ms": 600,
       "conversations": [
@@ -38,6 +38,9 @@
           "messages": [
             { "id": "BW01", "from": "447700900102@s.whatsapp.net", "text": "Wall reset this week, new blues in the cave", "at": "-30h" },
             { "id": "BW02", "from": "447700900103@s.whatsapp.net", "media": "image", "caption": "The new overhang", "at": "-29h" },
+            { "id": "BW10", "from": "447700900104@s.whatsapp.net", "media": "document", "filename": "route-plan.pdf", "at": "-29h30m" },
+            { "id": "BW11", "from": "me", "text": "Looks good, I'll take the cave", "reply_to": "BW10", "at": "-29h15m" },
+            { "id": "BW12", "from": "447700900102@s.whatsapp.net", "text": "Count me in", "reply_to": "BW00", "quoted_text": "Who's helping with the reset on Sunday?", "quoted_from": "447700900104@s.whatsapp.net", "at": "-29h10m" },
             { "id": "BW03", "from": "me", "text": "I'm in, 7pm?", "at": "-28h" },
             { "id": "BW04", "from": "447700900104@s.whatsapp.net", "text": "7 works", "at": "-3h" },
             { "id": "BW05", "from": "447700900102@s.whatsapp.net", "media": "voice", "at": "-2h50m" },
