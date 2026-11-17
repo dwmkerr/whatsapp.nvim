@@ -44,6 +44,7 @@ type WA struct {
 	downloads     chan struct{}
 	appStateMu    sync.Mutex
 	appStateStage map[appstate.WAPatchName]int // how far recovery has gone, see resyncAppState
+	repairOnce    sync.Once
 }
 
 func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
@@ -194,6 +195,9 @@ func (w *WA) Logout(ctx context.Context) error {
 func (w *WA) handleEvent(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Connected:
+		// Before the editor lists anything, so rows older bridges stored as
+		// unsupported never show.
+		w.repairOnce.Do(func() { w.RepairUnsupported(context.Background()) })
 		w.out.Emit("connected", nil)
 		// The editor may have asked to be online before the socket was up.
 		if w.available {
@@ -383,15 +387,19 @@ func (w *WA) contactName(ctx context.Context, jid types.JID) string {
 // replay goes through the same path with live=false so names and dedup
 // behave identically.
 func (w *WA) handleMessage(evt *events.Message, live bool) {
-	e := extract(evt.Message)
-	if e.Skip {
-		return
-	}
 	// Status posts and other broadcasts are not conversations.
 	if evt.Info.Chat.Server == types.BroadcastServer {
 		return
 	}
 	ctx := context.Background()
+	if target, content, ok := w.edit(ctx, evt); ok {
+		w.applyEdit(w.canonical(ctx, evt.Info.Chat, evt.Info.RecipientAlt), target, content, live)
+		return
+	}
+	e := extract(evt.Message)
+	if e.Skip {
+		return
+	}
 	chat := w.canonical(ctx, evt.Info.Chat, evt.Info.RecipientAlt)
 	sender := w.canonical(ctx, evt.Info.Sender, evt.Info.SenderAlt)
 	if evt.Info.IsFromMe {
@@ -895,6 +903,138 @@ func (w *WA) ListMessages(jid string, limit int, before int64) ([]Message, error
 		kept = append(kept, msgs[i])
 	}
 	return kept, nil
+}
+
+// edit reports whether evt changes an earlier message, and returns that
+// message's id and its new content. The content is nil when the edit can't
+// be read; it is still an edit, so it is dropped rather than shown as a
+// message of its own.
+func (w *WA) edit(ctx context.Context, evt *events.Message) (string, *waE2E.Message, bool) {
+	m := evt.Message
+	if pm := m.GetProtocolMessage(); pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT {
+		return pm.GetKey().GetID(), pm.GetEditedMessage(), true
+	}
+	if se := m.GetSecretEncryptedMessage(); se.GetSecretEncType() == waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
+		target := se.GetTargetMessageKey().GetID()
+		content, err := w.decryptEdit(ctx, evt)
+		if err != nil {
+			w.log.Warnf("edit of %s in %s: %v", target, evt.Info.Chat, err)
+			return target, nil, true
+		}
+		if pm := content.GetProtocolMessage(); pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT {
+			content = pm.GetEditedMessage()
+		}
+		return target, content, true
+	}
+	// History sync hands over an edit already unwrapped, under the id of
+	// the message it changes.
+	if evt.IsEdit {
+		return evt.Info.ID, m, true
+	}
+	return "", nil, false
+}
+
+// decryptEdit opens an edit encrypted with the original message's secret,
+// the form group edits arrive in. A fixture stores the new content in the
+// clear, since it has no keys.
+func (w *WA) decryptEdit(ctx context.Context, evt *events.Message) (*waE2E.Message, error) {
+	if w.fixture {
+		var m waE2E.Message
+		err := proto.Unmarshal(evt.Message.GetSecretEncryptedMessage().GetEncPayload(), &m)
+		return &m, err
+	}
+	m, err := w.cli.DecryptSecretEncryptedMessage(ctx, evt)
+	if err == nil || evt.Info.Sender.Server != types.DefaultUserServer {
+		return m, err
+	}
+	// Rows stored by older bridges keep the sender's phone number, but in
+	// groups that address members by LID the key was made with the LID.
+	lid, lerr := w.cli.Store.LIDs.GetLIDForPN(ctx, evt.Info.Sender)
+	if lerr != nil || lid.IsEmpty() {
+		return m, err
+	}
+	retry := *evt
+	retry.Info.Sender = lid
+	return w.cli.DecryptSecretEncryptedMessage(ctx, &retry)
+}
+
+// applyEdit puts an edit's new text on the message it changes. An edit to a
+// message the store never saw has nothing to change.
+func (w *WA) applyEdit(chat types.JID, target string, content *waE2E.Message, live bool) {
+	if content == nil {
+		return
+	}
+	e := extract(content)
+	if e.Skip {
+		return
+	}
+	found, err := w.store.EditMessage(chat.String(), target, e.Text)
+	if err != nil {
+		w.log.Warnf("edit message: %v", err)
+		return
+	}
+	if !found || !live {
+		return
+	}
+	w.out.Emit("message.edited", map[string]string{"chat_jid": chat.String(), "id": target, "text": e.Text})
+	w.out.Emit("chats.changed", nil)
+}
+
+// RepairUnsupported reads rows that older bridges stored as unsupported
+// again with the current extract. Edits are applied to the message they
+// change, types now skipped are dropped, and types now understood get their
+// text. Returns how many rows changed.
+func (w *WA) RepairUnsupported(ctx context.Context) int {
+	rows, err := w.store.UnsupportedMessages()
+	if err != nil {
+		w.log.Warnf("unsupported messages: %v", err)
+		return 0
+	}
+	changed := 0
+	for _, r := range rows {
+		var pm waE2E.Message
+		if proto.Unmarshal(r.raw, &pm) != nil {
+			continue
+		}
+		chat, err := types.ParseJID(r.ChatJID)
+		if err != nil {
+			continue
+		}
+		sender, _ := types.ParseJID(r.Sender)
+		evt := &events.Message{
+			Info: types.MessageInfo{
+				MessageSource: types.MessageSource{Chat: chat, Sender: sender, IsFromMe: r.FromMe, IsGroup: chat.Server == types.GroupServer},
+				ID:            r.ID,
+				Timestamp:     time.Unix(r.TS, 0),
+			},
+			Message: &pm,
+		}
+		if target, content, ok := w.edit(ctx, evt); ok {
+			// Kept, and hidden by nowSkipped, when it can't be read: the
+			// original's secret may still arrive with history.
+			if content == nil {
+				continue
+			}
+			w.applyEdit(chat, target, content, false)
+			_ = w.store.DeleteMessage(r.ChatJID, r.ID)
+			changed++
+			continue
+		}
+		e := extract(&pm)
+		switch {
+		case e.Skip:
+			_ = w.store.DeleteMessage(r.ChatJID, r.ID)
+			changed++
+		case e.Text != unsupportedText:
+			_ = w.store.SetMessageContent(r.ChatJID, r.ID, e.Text, e.MediaType, e.Filename)
+			changed++
+		}
+	}
+	if changed > 0 {
+		w.log.Infof("repaired %d messages stored as unsupported", changed)
+		w.out.Emit("chats.changed", nil)
+	}
+	return changed
 }
 
 // nowSkipped reports a row stored as unsupported whose type extract has

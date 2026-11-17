@@ -260,6 +260,18 @@ local function wire_events()
     end
     M.refresh_chats_soon()
   end)
+  client.on("message.edited", function(d)
+    for _, m in ipairs(S.messages[d.chat_jid] or {}) do
+      if m.id == d.id then
+        m.text = d.text
+        m.edited = true
+      end
+    end
+    if S.current == d.chat_jid and S.layout_valid() then
+      chat.render()
+    end
+    M.refresh_chats_soon()
+  end)
   client.on("fatal", function(d)
     S.fatal = d.error
     notify(d.error, vim.log.levels.ERROR)

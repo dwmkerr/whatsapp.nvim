@@ -23,6 +23,25 @@ const unsupportedText = "[unsupported message]"
 // extract flattens the many waE2E.Message variants into text plus an
 // optional media tag. Unknown types produce a bracketed placeholder so the
 // chat never silently drops a message.
+// poll returns the poll in m, whichever of the versions the phone sent.
+func poll(m *waE2E.Message) *waE2E.PollCreationMessage {
+	for _, p := range []*waE2E.PollCreationMessage{
+		m.PollCreationMessage, m.PollCreationMessageV2, m.PollCreationMessageV3,
+		m.PollCreationMessageV5, m.PollCreationMessageV6,
+		m.GetPollCreationMessageV4().GetMessage().GetPollCreationMessage(),
+	} {
+		if p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
+func hdCopy(m *waE2E.Message) bool {
+	return m.AssociatedChildMessage != nil &&
+		m.GetMessageContextInfo().GetMessageAssociation().GetAssociationType() == waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD
+}
+
 func extract(m *waE2E.Message) extracted {
 	if m == nil {
 		return extracted{Skip: true}
@@ -66,14 +85,16 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = "[contact] " + m.ContactMessage.GetDisplayName()
 	case m.LocationMessage != nil:
 		e.Text = "[location] " + m.LocationMessage.GetName()
-	case m.PollCreationMessage != nil:
-		e.Text = "[poll] " + m.PollCreationMessage.GetName()
-	case m.PollCreationMessageV3 != nil:
-		e.Text = "[poll] " + m.PollCreationMessageV3.GetName()
+	case poll(m) != nil:
+		e.Text = "[poll] " + poll(m).GetName()
 	// An album header only announces the photos that follow as ordinary
-	// image messages; the phone shows the photos, never the header.
+	// image messages; the phone shows the photos, never the header. An HD
+	// photo is sent twice and the phone shows it once, so the second copy
+	// is skipped. Edits change an earlier message (see WA.edit) rather than
+	// add one.
 	case m.ReactionMessage != nil, m.ProtocolMessage != nil, m.SenderKeyDistributionMessage != nil,
-		m.PollUpdateMessage != nil, m.DeviceSentMessage != nil, m.AlbumMessage != nil:
+		m.PollUpdateMessage != nil, m.DeviceSentMessage != nil, m.AlbumMessage != nil,
+		m.SecretEncryptedMessage != nil, hdCopy(m):
 		e.Skip = true
 	default:
 		e.Text = unsupportedText

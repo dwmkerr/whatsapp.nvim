@@ -112,6 +112,30 @@ make build
 
 `make test` runs the Go and Lua tests. Plugin layout, bridge protocol and options are in [`dist/README.md`](./dist/README.md).
 
+### Synthetic account
+
+`make demo` opens the plugin against an invented account, with no phone needed. It replays [`dist/test/fixtures/synthetic.json`](./dist/test/fixtures/synthetic.json) through the same code that handles live WhatsApp traffic, and `make test` replays it too. See [`docs/development.md`](./docs/development.md) for the format.
+
+The dataset grows with each bug found on a real account. It covers these edge cases:
+
+| Edge case | In the dataset | Issue |
+| --- | --- | --- |
+| Unread counts from the phone's history sync | Ada, Boulder Wednesdays | |
+| Replies, including to a document and to a message older than the stored history | Ada, Boulder Wednesdays | [#34](https://github.com/dwmkerr/whatsapp.nvim/issues/34) |
+| Media: image, voice note, document, sticker | Boulder Wednesdays, Elin, Cleo | |
+| Chats archived on the phone, sent in history | Five-a-side Fridays, Allotment Society | [#30](https://github.com/dwmkerr/whatsapp.nvim/issues/30) |
+| Archived only in the app state full sync | Book Club | |
+| Archived on the phone while the plugin is open | Cleo | |
+| Marked unread on the phone, in history and in an app state full sync | Bram, Dev | [#29](https://github.com/dwmkerr/whatsapp.nvim/issues/29) |
+| Messages that arrived while offline, replayed one by one | Ada, Boulder Wednesdays, Five-a-side Fridays, Fitz | |
+| Read on the phone after the plugin connected | Ada | |
+| Group named only after its lookup failed during history | Ridge Walkers | [#36](https://github.com/dwmkerr/whatsapp.nvim/issues/36) |
+| Group named only by the joined-groups list | Harbour Swimmers | [#36](https://github.com/dwmkerr/whatsapp.nvim/issues/36) |
+| Group without a subject, named after its members | Ada, Bram & Gus | [#39](https://github.com/dwmkerr/whatsapp.nvim/issues/39) |
+| Edits: encrypted in a group, plain in a direct chat | Boulder Wednesdays, Ada | [#42](https://github.com/dwmkerr/whatsapp.nvim/issues/42) |
+| A photo sent in HD, which arrives twice | Boulder Wednesdays | [#43](https://github.com/dwmkerr/whatsapp.nvim/issues/43) |
+| A poll in the newest format | Boulder Wednesdays | [#44](https://github.com/dwmkerr/whatsapp.nvim/issues/44) |
+
 I have found that when working live in WhatsApp, the best flow is:
 
 ```sh

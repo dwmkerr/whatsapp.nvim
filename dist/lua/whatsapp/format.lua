@@ -206,7 +206,8 @@ function M.bubbles(messages, is_group, width, image_cols)
       last_day = day
     end
     local who = text.fit(text.name(m.from_me and "me" or (m.sender_name ~= "" and m.sender_name or m.sender)), inner_max - 1)
-    local time = os.date("%H:%M", m.ts)
+    -- The phone marks an edited message beside its time.
+    local time = (m.edited and "edited " or "") .. os.date("%H:%M", m.ts)
     local body = m.text or ""
     local tag = media_tag(m)
     if tag then
@@ -311,7 +312,7 @@ function M.conversation(messages, is_group)
     if tag then
       body = body ~= "" and (tag .. " " .. body) or tag
     end
-    local first = true
+    local first, last = true, nil
     for part in (body .. "\n"):gmatch("(.-)\n") do
       if first then
         local n = add(prefix .. part, m)
@@ -321,9 +322,15 @@ function M.conversation(messages, is_group)
           spans[#spans + 1] = { n - 1, #prefix, #prefix + #tag, "WhatsAppMedia" }
         end
         first = false
+        last = n
       else
-        add(string.rep(" ", #prefix) .. part, m)
+        last = add(string.rep(" ", #prefix) .. part, m)
       end
+    end
+    if m.edited then
+      local from = #lines[last] + 1
+      lines[last] = lines[last] .. " edited"
+      spans[#spans + 1] = { last - 1, from, -1, "WhatsAppTime" }
     end
   end
   return lines, owners, spans
