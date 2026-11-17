@@ -130,14 +130,15 @@ return function()
   local was_synced = S.synced
   S.synced = false
   events["sync.progress"]({ percent = 34 })
-  check(list_bar():find("syncing 34%%", 1, true) ~= nil and splash_has("syncing history · 34%"), "sync progress shows in the list winbar and the splash")
+  check(list_bar():find("Syncing 34%%", 1, true) ~= nil and splash_has("syncing history · 34%"), "sync progress shows in the list winbar and the splash")
+  check(vim.api.nvim_eval_statusline(list_bar(), { winid = S.wins.list, use_winbar = true }).width <= 32, "the syncing winbar fits the default list width")
   local list_mod = require("whatsapp.ui.list")
   local renders, list_render = 0, list_mod.render
   list_mod.render = function(...) renders = renders + 1; return list_render(...) end
   for _ = 1, 50 do events["chats.changed"]() end
   check(renders == 0, "a burst of changes does not redraw the list at once")
   events["sync.done"]()
-  check(wait_for(function() return renders >= 1 end) and list_bar():find("syncing", 1, true) == nil, "sync done redraws the list and clears the progress")
+  check(wait_for(function() return renders >= 1 end) and list_bar():find("Syncing", 1, true) == nil, "sync done redraws the list and clears the progress")
   check(wait_for(function() return false end, 1300) == false and renders <= 2, "the burst collapsed into one redraw: " .. renders)
   list_mod.render = list_render
   S.synced = was_synced

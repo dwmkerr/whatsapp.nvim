@@ -124,8 +124,10 @@ function M.update_bar()
   local bar = " WhatsApp"
   local p = S.sync_percent()
   if p then
+    -- Replaces the title so the bar fits the default 32-column list; with
+    -- the title as well it overflowed and Neovim cut it from the left.
     -- The winbar is a statusline format, where a bare % starts an item.
-    bar = bar .. " · syncing " .. p .. "%%"
+    bar = " Syncing " .. p .. "%%"
   else
     local n = 0
     for _, c in ipairs(S.inbox()) do
