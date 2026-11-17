@@ -37,6 +37,7 @@ type WA struct {
 	syncDone      bool
 	fixture       bool     // replaying a synthetic account, see fixture.go
 	groupNames    sync.Map // fixture only: group jid -> name, see groupName
+	joinedNames   sync.Map // fixture only: the joined-groups list, see joinedGroupNames
 	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
@@ -1071,4 +1072,25 @@ func (w *WA) groupName(ctx context.Context, jid types.JID) (string, error) {
 		return "", err
 	}
 	return gi.Name, nil
+}
+
+// joinedGroupNames lists every group the account is in with its name, in
+// one request. A fixture answers from its timeline.
+func (w *WA) joinedGroupNames(ctx context.Context) (map[string]string, error) {
+	out := map[string]string{}
+	if w.fixture {
+		w.joinedNames.Range(func(k, v any) bool {
+			out[k.(string)] = v.(string)
+			return true
+		})
+		return out, nil
+	}
+	groups, err := w.cli.GetJoinedGroups(ctx)
+	if err != nil {
+		return out, err
+	}
+	for _, g := range groups {
+		out[g.JID.String()] = g.Name
+	}
+	return out, nil
 }
