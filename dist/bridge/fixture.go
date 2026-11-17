@@ -51,10 +51,12 @@ type fixtureName struct {
 //	read_receipt     chat, ids, at
 //	offline_preview  messages
 //	offline_done     messages
-//	group_info       chat, name, joined_only: the server answers group info
-//	                 requests for chat from here on; before it, they fail, as
-//	                 they can live. joined_only: only the joined-groups list
-//	                 names it, the per-group request keeps failing
+//	group_info       chat, name, members, joined_only: the server answers group
+//	                 info requests for chat from here on; before it, they fail,
+//	                 as they can live. members: participant JIDs, "me" for us;
+//	                 a group without a subject has members and no name.
+//	                 joined_only: only the joined-groups list names it, the
+//	                 per-group request keeps failing
 type fixtureEvent struct {
 	Type    string `json:"type"`
 	Note    string `json:"note,omitempty"`     // why the event is in the dataset, e.g. the issue it reproduces
@@ -71,6 +73,7 @@ type fixtureEvent struct {
 	FullSync   bool     `json:"full_sync,omitempty"`
 	IDs        []string `json:"ids,omitempty"`
 	Name       string   `json:"name,omitempty"`
+	Members    []string `json:"members,omitempty"`
 	JoinedOnly bool     `json:"joined_only,omitempty"`
 	Messages   int      `json:"messages,omitempty"`
 }
@@ -360,10 +363,22 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		if chat.Server != types.GroupServer || e.Name == "" {
-			return nil, fmt.Errorf("group_info needs a group chat and a name")
+		if chat.Server != types.GroupServer || (e.Name == "" && len(e.Members) == 0) {
+			return nil, fmt.Errorf("group_info needs a group chat and a name or members")
 		}
-		return &fixtureGroupInfo{JID: chat, Name: e.Name, JoinedOnly: e.JoinedOnly}, nil
+		members := make([]types.JID, 0, len(e.Members))
+		for _, m := range e.Members {
+			if m == "me" {
+				members = append(members, fx.meJID())
+				continue
+			}
+			j, err := parseFixtureJID(m)
+			if err != nil {
+				return nil, fmt.Errorf("member %q: %w", m, err)
+			}
+			members = append(members, j)
+		}
+		return &fixtureGroupInfo{JID: chat, Name: e.Name, Members: members, JoinedOnly: e.JoinedOnly}, nil
 	}
 	return nil, fmt.Errorf("unknown event type %q", e.Type)
 }
@@ -409,10 +424,11 @@ func (w *WA) useFixture(ctx context.Context, fx *fixture) error {
 // would after connecting. A pace of 0 skips the delays, for tests; recordings
 // raise it so slow screen captures still catch states that pass in a second.
 // fixtureGroupInfo is not a whatsmeow event: replay keeps it as the answer
-// groupName gives from then on.
+// groupInfo gives from then on.
 type fixtureGroupInfo struct {
 	JID        types.JID
 	Name       string
+	Members    []types.JID
 	JoinedOnly bool
 }
 
@@ -428,9 +444,13 @@ func (w *WA) replay(fx *fixture, pace float64) {
 			continue
 		}
 		if gi, ok := evt.(*fixtureGroupInfo); ok {
-			w.joinedNames.Store(gi.JID.String(), gi.Name)
+			g := groupMeta{Name: gi.Name}
+			for _, m := range gi.Members {
+				g.Members = append(g.Members, types.GroupParticipant{JID: m, PhoneNumber: m})
+			}
+			w.joinedInfos.Store(gi.JID.String(), g)
 			if !gi.JoinedOnly {
-				w.groupNames.Store(gi.JID.String(), gi.Name)
+				w.groupInfos.Store(gi.JID.String(), g)
 			}
 			continue
 		}

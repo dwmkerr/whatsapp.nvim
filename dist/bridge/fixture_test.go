@@ -53,8 +53,8 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	w, out := replayFixture(t, syntheticFixture)
 	by := chatsByName(t, w)
 
-	if len(by) != 12 {
-		t.Fatalf("want 12 chats, got %d: %v", len(by), by)
+	if len(by) != 13 {
+		t.Fatalf("want 13 chats, got %d: %v", len(by), by)
 	}
 	if c := by["Boulder Wednesdays"]; !c.IsGroup || c.Unread != 4 {
 		t.Errorf("group keeps its name and counts the offline message: %+v", c)
@@ -168,6 +168,65 @@ func TestGroupNamedFromTheJoinedListWhenItsLookupFails(t *testing.T) {
 	}
 	if c.Name != "Harbour Swimmers" {
 		t.Errorf("a group whose own lookup keeps failing takes its name from the joined-groups list: %+v", c)
+	}
+}
+
+func TestGroupWithoutSubjectNamedAfterItsMembers(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	jid := "120363400000000007@g.us"
+	c, err := w.store.GetChat(jid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Ada, Bram & Gus" {
+		t.Errorf("a group without a subject shows the other members' first names, as the phone does: %+v", c)
+	}
+	if n := w.store.ChatName(jid); n != "" {
+		t.Errorf("the members' names are not stored as the subject: %q", n)
+	}
+	unnamed, _ := w.store.UnnamedChats()
+	retried := false
+	for _, u := range unnamed {
+		retried = retried || u.JID == jid
+	}
+	if !retried {
+		t.Error("a group named after its members is still asked for a subject")
+	}
+	if err := w.store.RenameChat(jid, "Van Share"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := w.store.GetChat(jid); c.Name != "Van Share" {
+		t.Errorf("a subject set later replaces the members' names: %+v", c)
+	}
+}
+
+func TestMembersNameReplacesAStoredPlaceholder(t *testing.T) {
+	s := newTestStore(t)
+	jid := "120363400000000011@g.us"
+	if err := s.UpsertChat(jid, "Group 120363400000000011", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetMembersName(jid, "Ada & Bram"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetChat(jid); c.Name != "Ada & Bram" {
+		t.Errorf("a placeholder saved by an older bridge gives way to the members' names: %+v", c)
+	}
+}
+
+func TestJoinNamesLikeThePhone(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"Ada"}, "Ada"},
+		{[]string{"Ada", "Bram"}, "Ada & Bram"},
+		{[]string{"Ada", "Bram", "Gus", "Elin"}, "Ada, Bram, Gus & Elin"},
+	} {
+		if got := joinNames(tc.in); got != tc.want {
+			t.Errorf("joinNames(%v) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
 
