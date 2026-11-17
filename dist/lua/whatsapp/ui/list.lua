@@ -10,6 +10,7 @@ local filters = {
   { id = "all", label = "All", empty = "no chats yet" },
   { id = "unread", label = "Unread", empty = "no unread chats" },
   { id = "groups", label = "Groups", empty = "no groups" },
+  { id = "archived", label = "Archived", empty = "no archived chats" },
 }
 
 local function filter_index()
@@ -22,7 +23,13 @@ local function filter_index()
 end
 
 local function keep_chat(c)
-  if S.filter == "unread" then
+  -- Archived chats only show under their own filter, as on the phone, so
+  -- the chats the user put away never crowd the others.
+  if S.filter == "archived" then
+    return c.archived == true
+  elseif c.archived then
+    return false
+  elseif S.filter == "unread" then
     -- Opening a chat reads it. Keep the open one listed, as the phone does,
     -- so the row just picked does not vanish from under the cursor.
     return c.unread > 0 or c.jid == S.current
@@ -77,7 +84,7 @@ function M.ensure_buf()
       wa.open_chat(M.jid_under_cursor())
     end
   end, "Open chat, or cycle the filter")
-  map("f", M.cycle_filter, "Filter: all / unread / groups")
+  map("f", M.cycle_filter, "Filter: all / unread / groups / archived")
   map("l", function() wa.open_chat(M.jid_under_cursor()) end, "Open chat")
   map("i", function()
     wa.open_chat(M.jid_under_cursor())
@@ -123,7 +130,7 @@ function M.update_bar()
     bar = " Syncing " .. p .. "%%"
   else
     local n = 0
-    for _, c in ipairs(S.chats) do
+    for _, c in ipairs(S.inbox()) do
       if c.unread > 0 then
         n = n + 1
       end

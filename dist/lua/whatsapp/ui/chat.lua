@@ -252,8 +252,8 @@ local function splash(width, height)
     local p = S.sync_percent()
     note("syncing history" .. (p and (" · " .. p .. "%") or ""))
   else
-    local unread = 0
-    for _, c in ipairs(S.chats) do
+    local chats, unread = S.inbox(), 0
+    for _, c in ipairs(chats) do
       if c.unread > 0 then
         unread = unread + 1
       end
@@ -266,7 +266,7 @@ local function splash(width, height)
     key("g?", "all keys")
     key("q", "close")
     rows[#rows + 1] = {}
-    note("connected · " .. #S.chats .. " chats · " .. unread .. " unread")
+    note("connected · " .. #chats .. " chats · " .. unread .. " unread")
     local stale = S.out_of_sync_label()
     if stale then
       rows[#rows + 1] = { text = stale .. " out of sync · open WhatsApp on your phone", hl = "WarningMsg" }
