@@ -16,6 +16,7 @@ type Chat struct {
 	IsGroup  bool   `json:"is_group"`
 	LastTS   int64  `json:"last_ts"`
 	Unread   int    `json:"unread"`
+	Archived bool   `json:"archived,omitempty"`
 	LastText string `json:"last_text,omitempty"`
 }
 
@@ -40,6 +41,9 @@ type Message struct {
 
 type Store struct {
 	db *sql.DB
+	// ArchiveUnknown is set when this open added the archived column, so the
+	// chats already stored have never heard which of them are archived.
+	ArchiveUnknown bool
 }
 
 const schema = `
@@ -48,7 +52,8 @@ CREATE TABLE IF NOT EXISTS chats (
 	name TEXT NOT NULL DEFAULT '',
 	is_group INTEGER NOT NULL DEFAULT 0,
 	last_ts INTEGER NOT NULL DEFAULT 0,
-	unread INTEGER NOT NULL DEFAULT 0
+	unread INTEGER NOT NULL DEFAULT 0,
+	archived INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
 	id TEXT NOT NULL,
@@ -76,8 +81,38 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	added, err := addColumn(db, "chats", "archived", "INTEGER NOT NULL DEFAULT 0")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate chats: %w", err)
+	}
 	restrictFile(path)
-	return &Store{db: db}, nil
+	return &Store{db: db, ArchiveUnknown: added}, nil
+}
+
+// addColumn brings a store created by an older bridge up to the current
+// schema. CREATE TABLE IF NOT EXISTS leaves an existing table as it was.
+func addColumn(db *sql.DB, table, column, def string) (bool, error) {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return false, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	rows.Close()
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err == nil, err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -161,6 +196,11 @@ func (s *Store) ClearUnread(jid string) error {
 	return err
 }
 
+func (s *Store) SetArchived(jid string, archived bool) error {
+	_, err := s.db.Exec(`UPDATE chats SET archived = ? WHERE jid = ?`, boolInt(archived), jid)
+	return err
+}
+
 func (s *Store) SetUnread(jid string, n int) error {
 	_, err := s.db.Exec(`UPDATE chats SET unread = ? WHERE jid = ?`, n, jid)
 	return err
@@ -199,16 +239,17 @@ func (s *Store) ChatName(jid string) string {
 
 func (s *Store) GetChat(jid string) (Chat, error) {
 	var c Chat
-	var isGroup int
-	err := s.db.QueryRow(`SELECT jid, name, is_group, last_ts, unread FROM chats WHERE jid = ?`, jid).
-		Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread)
+	var isGroup, archived int
+	err := s.db.QueryRow(`SELECT jid, name, is_group, last_ts, unread, archived FROM chats WHERE jid = ?`, jid).
+		Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived)
 	c.IsGroup = isGroup == 1
+	c.Archived = archived == 1
 	return c, err
 }
 
 func (s *Store) ListChats() ([]Chat, error) {
 	rows, err := s.db.Query(`
-		SELECT c.jid, c.name, c.is_group, c.last_ts, c.unread,
+		SELECT c.jid, c.name, c.is_group, c.last_ts, c.unread, c.archived,
 			COALESCE((SELECT text FROM messages m WHERE m.chat_jid = c.jid ORDER BY ts DESC LIMIT 1), '')
 		FROM chats c
 		WHERE c.last_ts > 0
@@ -220,11 +261,12 @@ func (s *Store) ListChats() ([]Chat, error) {
 	out := []Chat{}
 	for rows.Next() {
 		var c Chat
-		var isGroup int
-		if err := rows.Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &c.LastText); err != nil {
+		var isGroup, archived int
+		if err := rows.Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived, &c.LastText); err != nil {
 			return nil, err
 		}
 		c.IsGroup = isGroup == 1
+		c.Archived = archived == 1
 		out = append(out, c)
 	}
 	return out, rows.Err()

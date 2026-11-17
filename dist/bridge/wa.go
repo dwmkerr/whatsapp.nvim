@@ -35,6 +35,7 @@ type WA struct {
 	pairing       sync.Mutex
 	names         sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone      bool
+	fixture       bool // replaying a synthetic account, see fixture.go
 	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
@@ -82,7 +83,7 @@ func (w *WA) Paired() bool { return w.cli.Store.ID != nil }
 func (w *WA) Status() map[string]interface{} {
 	return map[string]interface{}{
 		"paired":    w.Paired(),
-		"connected": w.cli.IsConnected(),
+		"connected": w.cli.IsConnected() || w.fixture,
 		"logged_in": w.cli.IsLoggedIn(),
 		"synced":    w.syncDone,
 		"store":     w.dir,
@@ -164,6 +165,11 @@ func (w *WA) Logout(ctx context.Context) error {
 	if !w.Paired() {
 		return errors.New("not paired")
 	}
+	if w.fixture {
+		_ = w.store.Reset()
+		w.out.Emit("logged_out", map[string]string{"reason": "user"})
+		return nil
+	}
 	remoteErr := w.cli.Logout(ctx)
 	if remoteErr != nil {
 		w.cli.Disconnect()
@@ -194,6 +200,12 @@ func (w *WA) handleEvent(evt interface{}) {
 		// on it, so every reconnect asks again until one arrives.
 		for _, name := range w.appStateWaiting() {
 			w.requestAppStateRecovery(name)
+		}
+		// Cleared here rather than after the fetch, so a reconnect while
+		// it runs does not start a second one.
+		if w.store.ArchiveUnknown && !w.fixture {
+			w.store.ArchiveUnknown = false
+			go w.learnArchive()
 		}
 	case *events.AppStateSyncError:
 		w.resyncAppState(v)
@@ -260,6 +272,13 @@ func (w *WA) handleEvent(evt interface{}) {
 		} else {
 			_ = w.store.SetUnread(jid, 1)
 		}
+		w.out.Emit("chats.changed", nil)
+	case *events.Archive:
+		// Unlike read marks, a full sync is the useful case here: it is a
+		// snapshot of which chats are archived now, and history sync only
+		// covers the chats it sends.
+		chat := w.canonical(context.Background(), v.JID, types.EmptyJID).String()
+		_ = w.store.SetArchived(chat, v.Action.GetArchived())
 		w.out.Emit("chats.changed", nil)
 	case *events.Contact:
 		jid := v.JID.ToNonAD().String()
@@ -441,6 +460,9 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 			w.handleMessage(parsed, false)
 			count++
 		}
+		if conv.GetArchived() {
+			_ = w.store.SetArchived(w.canonical(context.Background(), jid, types.EmptyJID).String(), true)
+		}
 		// The phone's unread state only arrives with the sync; without it
 		// every chat looks read until a new message lands.
 		if n := int(conv.GetUnreadCount()); n > 0 || conv.GetMarkedAsUnread() {
@@ -515,7 +537,7 @@ func (w *WA) SendText(ctx context.Context, chatJID, text, replyTo string) (Messa
 	if err != nil {
 		return Message{}, fmt.Errorf("bad jid: %w", err)
 	}
-	if !w.cli.IsConnected() {
+	if !w.cli.IsConnected() && !w.fixture {
 		return Message{}, errors.New("not connected")
 	}
 	msg := &waE2E.Message{}
@@ -534,8 +556,10 @@ func (w *WA) SendText(ctx context.Context, chatJID, text, replyTo string) (Messa
 		}
 		msg.ExtendedTextMessage = &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}
 	}
-	resp, err := w.cli.SendMessage(ctx, chat, msg)
-	if err != nil {
+	var resp whatsmeow.SendResponse
+	if w.fixture {
+		resp = whatsmeow.SendResponse{ID: w.cli.GenerateMessageID(), Timestamp: time.Now()}
+	} else if resp, err = w.cli.SendMessage(ctx, chat, msg); err != nil {
 		return Message{}, err
 	}
 	// whatsmeow does not echo our own sends as events, so persist here.
@@ -557,6 +581,9 @@ func (w *WA) React(ctx context.Context, chatJID, msgID, emoji string) error {
 	target, err := w.store.GetMessage(chatJID, msgID)
 	if err != nil {
 		return fmt.Errorf("unknown message %s", msgID)
+	}
+	if w.fixture {
+		return nil
 	}
 	sender, _ := types.ParseJID(target.Sender)
 	_, err = w.cli.SendMessage(ctx, chat, w.cli.BuildReaction(chat, sender, types.MessageID(msgID), emoji))
@@ -619,6 +646,10 @@ func (w *WA) SetPresence(ctx context.Context, available bool) error {
 // device to the phone while that device is marked available, so without
 // the blip the phone keeps showing chats unread.
 func (w *WA) withPresence(ctx context.Context, fn func()) {
+	if w.fixture {
+		fn()
+		return
+	}
 	if err := w.cli.SendPresence(ctx, types.PresenceAvailable); err != nil {
 		w.log.Warnf("presence available: %v", err)
 	}
@@ -677,6 +708,9 @@ func (w *WA) Download(ctx context.Context, chatJID, msgID string) (string, error
 	}
 	if m.MediaType == "" || m.raw == nil {
 		return "", errors.New("not a media message")
+	}
+	if w.fixture {
+		return "", errors.New("fixture media has nothing to download")
 	}
 	var pm waE2E.Message
 	if err := proto.Unmarshal(m.raw, &pm); err != nil {
@@ -969,4 +1003,13 @@ func (o *offlineProgress) step() (int, bool) {
 	}
 	o.last = p
 	return p, true
+}
+
+// learnArchive fetches the archive snapshot once for a store that predates
+// the archived column, so upgrading does not leave archived chats in the
+// list until the next re-pair. Archive actions live in regular_low.
+func (w *WA) learnArchive() {
+	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {
+		w.log.Warnf("fetch archived chats: %v", err)
+	}
 }

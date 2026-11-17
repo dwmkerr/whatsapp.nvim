@@ -15,6 +15,7 @@ end
 local defaults = {
   bin = nil, -- defaults to <plugin>/bin/wa-bridge
   store = vim.fn.stdpath("data") .. "/whatsapp",
+  fixture = nil, -- path to a synthetic account to replay instead of connecting, see docs/development.md
   list_width = 32,
   unread_count = false, -- show how many messages are unread, left of the time
   compose_height = 3,
@@ -837,7 +838,7 @@ function M.open()
     S.out_of_sync = {}
     S.synced = false
     S.sync = nil
-    if not client.start(S.opts.bin, S.opts.store) then
+    if not client.start(S.opts.bin, S.opts.store, S.opts.fixture) then
       return
     end
   end
