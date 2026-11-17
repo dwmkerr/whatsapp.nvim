@@ -171,6 +171,51 @@ func TestGroupNamedFromTheJoinedListWhenItsLookupFails(t *testing.T) {
 	}
 }
 
+func TestGroupWithoutSubjectNamedAfterItsMembers(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	jid := "120363400000000007@g.us"
+	c, err := w.store.GetChat(jid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Ada, Bram & Gus" {
+		t.Errorf("a group without a subject shows the other members' first names, as the phone does: %+v", c)
+	}
+	if n := w.store.ChatName(jid); n != "" {
+		t.Errorf("the members' names are not stored as the subject: %q", n)
+	}
+	unnamed, _ := w.store.UnnamedChats()
+	retried := false
+	for _, u := range unnamed {
+		retried = retried || u.JID == jid
+	}
+	if !retried {
+		t.Error("a group named after its members is still asked for a subject")
+	}
+	if err := w.store.RenameChat(jid, "Van Share"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := w.store.GetChat(jid); c.Name != "Van Share" {
+		t.Errorf("a subject set later replaces the members' names: %+v", c)
+	}
+}
+
+func TestJoinNamesLikeThePhone(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"Ada"}, "Ada"},
+		{[]string{"Ada", "Bram"}, "Ada & Bram"},
+		{[]string{"Ada", "Bram", "Gus", "Elin"}, "Ada, Bram, Gus & Elin"},
+	} {
+		if got := joinNames(tc.in); got != tc.want {
+			t.Errorf("joinNames(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestStoredGroupPlaceholderIsRetried(t *testing.T) {
 	s := newTestStore(t)
 	jid := "120363400000000009@g.us"

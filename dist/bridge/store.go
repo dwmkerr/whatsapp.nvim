@@ -19,6 +19,8 @@ type Chat struct {
 	Unread   int    `json:"unread"`
 	Archived bool   `json:"archived,omitempty"`
 	LastText string `json:"last_text,omitempty"`
+
+	membersName string // a group without a subject, named after its members; see displayName
 }
 
 // Message is one row of a conversation as the editor sees it.
@@ -59,7 +61,8 @@ CREATE TABLE IF NOT EXISTS chats (
 	is_group INTEGER NOT NULL DEFAULT 0,
 	last_ts INTEGER NOT NULL DEFAULT 0,
 	unread INTEGER NOT NULL DEFAULT 0,
-	archived INTEGER NOT NULL DEFAULT 0
+	archived INTEGER NOT NULL DEFAULT 0,
+	members_name TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS messages (
 	id TEXT NOT NULL,
@@ -89,6 +92,10 @@ func OpenStore(path string) (*Store, error) {
 	}
 	added, err := addColumn(db, "chats", "archived", "INTEGER NOT NULL DEFAULT 0")
 	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate chats: %w", err)
+	}
+	if _, err := addColumn(db, "chats", "members_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate chats: %w", err)
 	}
@@ -163,6 +170,29 @@ func (s *Store) RenameChat(jid, name string) error {
 	}
 	_, err := s.db.Exec(`UPDATE messages SET sender_name = ? WHERE sender = ? AND from_me = 0`, name, jid)
 	return err
+}
+
+// SetMembersName records the name built from a group's members, and reports
+// whether it changed. It can arrive before the group's first message.
+func (s *Store) SetMembersName(jid, name string) (bool, error) {
+	if name == "" {
+		return false, nil
+	}
+	res, err := s.db.Exec(`
+		INSERT INTO chats (jid, is_group, members_name) VALUES (?, 1, ?)
+		ON CONFLICT(jid) DO UPDATE SET members_name = excluded.members_name
+		WHERE chats.members_name <> excluded.members_name`, jid, name)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (s *Store) MembersName(jid string) string {
+	var name string
+	_ = s.db.QueryRow(`SELECT members_name FROM chats WHERE jid = ?`, jid).Scan(&name)
+	return name
 }
 
 // UnnamedChats lists chats whose name is still the bare phone number or empty.
@@ -257,8 +287,8 @@ func (s *Store) ChatName(jid string) string {
 func (s *Store) GetChat(jid string) (Chat, error) {
 	var c Chat
 	var isGroup, archived int
-	err := s.db.QueryRow(`SELECT jid, name, is_group, last_ts, unread, archived FROM chats WHERE jid = ?`, jid).
-		Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived)
+	err := s.db.QueryRow(`SELECT jid, name, is_group, last_ts, unread, archived, members_name FROM chats WHERE jid = ?`, jid).
+		Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived, &c.membersName)
 	c.IsGroup = isGroup == 1
 	c.Archived = archived == 1
 	c.Name = displayName(c)
@@ -270,10 +300,14 @@ func groupPlaceholder(user string) string {
 	return "Group " + user
 }
 
-// displayName fills in a placeholder for a group the bridge could not name
-// yet. Only the editor sees it; the store keeps the name empty so the next
-// RefreshNames asks again.
+// displayName fills in a name for a group without one: its members' names
+// for a group created without a subject, or a placeholder while the bridge
+// cannot name it yet. Only the editor sees either; the store keeps the name
+// empty so the next RefreshNames asks again.
 func displayName(c Chat) string {
+	if c.Name == "" && c.membersName != "" {
+		return c.membersName
+	}
 	if c.Name == "" && c.IsGroup {
 		user, _, _ := strings.Cut(c.JID, "@")
 		return groupPlaceholder(user)
@@ -283,7 +317,7 @@ func displayName(c Chat) string {
 
 func (s *Store) ListChats() ([]Chat, error) {
 	rows, err := s.db.Query(`
-		SELECT c.jid, c.name, c.is_group, c.last_ts, c.unread, c.archived,
+		SELECT c.jid, c.name, c.is_group, c.last_ts, c.unread, c.archived, c.members_name,
 			COALESCE((SELECT text FROM messages m WHERE m.chat_jid = c.jid ORDER BY ts DESC LIMIT 1), '')
 		FROM chats c
 		WHERE c.last_ts > 0
@@ -296,7 +330,7 @@ func (s *Store) ListChats() ([]Chat, error) {
 	for rows.Next() {
 		var c Chat
 		var isGroup, archived int
-		if err := rows.Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived, &c.LastText); err != nil {
+		if err := rows.Scan(&c.JID, &c.Name, &isGroup, &c.LastTS, &c.Unread, &archived, &c.membersName, &c.LastText); err != nil {
 			return nil, err
 		}
 		c.IsGroup = isGroup == 1

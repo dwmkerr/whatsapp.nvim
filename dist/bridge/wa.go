@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,8 +37,8 @@ type WA struct {
 	names         sync.Map // jid string -> display name, avoids repeated contact lookups
 	syncDone      bool
 	fixture       bool     // replaying a synthetic account, see fixture.go
-	groupNames    sync.Map // fixture only: group jid -> name, see groupName
-	joinedNames   sync.Map // fixture only: the joined-groups list, see joinedGroupNames
+	groupInfos    sync.Map // fixture only: group jid -> groupMeta, see groupInfo
+	joinedInfos   sync.Map // fixture only: the joined-groups list, see joinedGroups
 	offline       offlineProgress
 	available     bool // editor asked to stay "online", see SetPresence
 	downloads     chan struct{}
@@ -317,7 +318,7 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 	changed := 0
 	// Fetched at most once per pass, and only when a group's own lookup
 	// fails: some groups never answer it but still appear in this list.
-	var joined map[string]string
+	var joined map[string]groupMeta
 	for _, c := range chats {
 		jid, err := types.ParseJID(c.JID)
 		if err != nil {
@@ -325,20 +326,27 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		}
 		var name string
 		if c.IsGroup {
-			n, err := w.groupName(ctx, jid)
+			g, err := w.groupInfo(ctx, jid)
 			if err != nil {
 				if joined == nil {
 					var jerr error
-					if joined, jerr = w.joinedGroupNames(ctx); jerr != nil {
+					if joined, jerr = w.joinedGroups(ctx); jerr != nil {
 						w.log.Warnf("joined groups: %v", jerr)
 					}
 				}
-				n = joined[c.JID]
-				if n == "" {
+				g = joined[c.JID]
+				if g.Name == "" && len(g.Members) == 0 {
 					w.log.Warnf("group %s has no name yet: %v", c.JID, err)
 				}
 			}
-			name = n
+			name = g.Name
+			// A group without a subject is named after its members, kept
+			// apart from the name so a subject set later still replaces it.
+			if name == "" {
+				if fresh, _ := w.store.SetMembersName(c.JID, w.membersName(ctx, g.Members)); fresh {
+					changed++
+				}
+			}
 		} else {
 			name = w.contactName(ctx, jid)
 		}
@@ -426,6 +434,9 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 	w.quote(ctx, &m)
 	if name == "" {
 		name = groupPlaceholder(chat.User)
+		if c, err := w.store.GetChat(chat.String()); err == nil {
+			name = c.Name
+		}
 	}
 	w.out.Emit("message", map[string]interface{}{"chat_name": name, "message": m})
 }
@@ -526,10 +537,20 @@ func (w *WA) chatName(ctx context.Context, jid types.JID, pushName string, isGro
 		return n.(string)
 	}
 	if isGroup {
-		if n, err := w.groupName(ctx, jid); err == nil && n != "" {
-			w.names.Store(jid.String(), n)
-			return n
+		// Asked again on connect by RefreshNames; asking on every message
+		// would cost a request per message in a group without a subject.
+		if w.store.MembersName(jid.String()) != "" {
+			return ""
 		}
+		g, err := w.groupInfo(ctx, jid)
+		if err != nil {
+			return ""
+		}
+		if g.Name != "" {
+			w.names.Store(jid.String(), g.Name)
+			return g.Name
+		}
+		_, _ = w.store.SetMembersName(jid.String(), w.membersName(ctx, g.Members))
 		return ""
 	}
 	return w.senderName(ctx, jid, pushName, false)
@@ -1071,30 +1092,37 @@ func (w *WA) learnArchive() {
 	}
 }
 
-// groupName asks the server for a group's subject. A fixture answers from
-// its timeline instead, and fails until a group_info event, as the server
-// can for a busy or restricted group.
-func (w *WA) groupName(ctx context.Context, jid types.JID) (string, error) {
+// groupMeta is what naming a group needs from its info: the subject, and
+// the members for a group created without one.
+type groupMeta struct {
+	Name    string
+	Members []types.GroupParticipant
+}
+
+// groupInfo asks the server about a group. A fixture answers from its
+// timeline instead, and fails until a group_info event, as the server can
+// for a busy or restricted group.
+func (w *WA) groupInfo(ctx context.Context, jid types.JID) (groupMeta, error) {
 	if w.fixture {
-		if n, ok := w.groupNames.Load(jid.String()); ok {
-			return n.(string), nil
+		if g, ok := w.groupInfos.Load(jid.String()); ok {
+			return g.(groupMeta), nil
 		}
-		return "", errors.New("no group info in the fixture yet")
+		return groupMeta{}, errors.New("no group info in the fixture yet")
 	}
 	gi, err := w.cli.GetGroupInfo(ctx, jid)
 	if err != nil {
-		return "", err
+		return groupMeta{}, err
 	}
-	return gi.Name, nil
+	return groupMeta{Name: gi.Name, Members: gi.Participants}, nil
 }
 
-// joinedGroupNames lists every group the account is in with its name, in
-// one request. A fixture answers from its timeline.
-func (w *WA) joinedGroupNames(ctx context.Context) (map[string]string, error) {
-	out := map[string]string{}
+// joinedGroups lists every group the account is in, in one request. A
+// fixture answers from its timeline.
+func (w *WA) joinedGroups(ctx context.Context) (map[string]groupMeta, error) {
+	out := map[string]groupMeta{}
 	if w.fixture {
-		w.joinedNames.Range(func(k, v any) bool {
-			out[k.(string)] = v.(string)
+		w.joinedInfos.Range(func(k, v any) bool {
+			out[k.(string)] = v.(groupMeta)
 			return true
 		})
 		return out, nil
@@ -1104,7 +1132,70 @@ func (w *WA) joinedGroupNames(ctx context.Context) (map[string]string, error) {
 		return out, err
 	}
 	for _, g := range groups {
-		out[g.JID.String()] = g.Name
+		out[g.JID.String()] = groupMeta{Name: g.Name, Members: g.Participants}
 	}
 	return out, nil
+}
+
+// membersName names a group without a subject the way the phone does: the
+// first names of everyone but us, "Ada, Bram & Gus".
+func (w *WA) membersName(ctx context.Context, members []types.GroupParticipant) string {
+	var names []string
+	for _, p := range members {
+		if w.isMe(p) {
+			continue
+		}
+		if n := w.participantName(ctx, p); n != "" {
+			names = append(names, strings.Fields(n)[0])
+		}
+	}
+	// The server's order changes between requests; sorting keeps the name
+	// from flickering in the list.
+	sort.Strings(names)
+	return joinNames(names)
+}
+
+func joinNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " & " + names[len(names)-1]
+}
+
+func (w *WA) isMe(p types.GroupParticipant) bool {
+	for _, own := range []*types.JID{w.cli.Store.ID, &w.cli.Store.LID} {
+		if own == nil || own.User == "" {
+			continue
+		}
+		if p.JID.User == own.User || p.PhoneNumber.User == own.User || p.LID.User == own.User {
+			return true
+		}
+	}
+	return false
+}
+
+// participantName prefers the phone number's contact, since groups that
+// address members by LID still have contacts saved under the number. A
+// stranger shows as their number, as on the phone.
+func (w *WA) participantName(ctx context.Context, p types.GroupParticipant) string {
+	for _, j := range []types.JID{p.PhoneNumber, p.JID, p.LID} {
+		if j.IsEmpty() {
+			continue
+		}
+		if n, ok := w.names.Load(j.ToNonAD().String()); ok {
+			return n.(string)
+		}
+		if n := w.contactName(ctx, j.ToNonAD()); n != "" {
+			return n
+		}
+	}
+	for _, j := range []types.JID{p.PhoneNumber, p.JID} {
+		if j.Server == types.DefaultUserServer {
+			return "+" + j.User
+		}
+	}
+	return ""
 }

@@ -424,7 +424,7 @@ func (w *WA) useFixture(ctx context.Context, fx *fixture) error {
 // would after connecting. A pace of 0 skips the delays, for tests; recordings
 // raise it so slow screen captures still catch states that pass in a second.
 // fixtureGroupInfo is not a whatsmeow event: replay keeps it as the answer
-// groupName gives from then on.
+// groupInfo gives from then on.
 type fixtureGroupInfo struct {
 	JID        types.JID
 	Name       string
@@ -444,9 +444,13 @@ func (w *WA) replay(fx *fixture, pace float64) {
 			continue
 		}
 		if gi, ok := evt.(*fixtureGroupInfo); ok {
-			w.joinedNames.Store(gi.JID.String(), gi.Name)
+			g := groupMeta{Name: gi.Name}
+			for _, m := range gi.Members {
+				g.Members = append(g.Members, types.GroupParticipant{JID: m, PhoneNumber: m})
+			}
+			w.joinedInfos.Store(gi.JID.String(), g)
 			if !gi.JoinedOnly {
-				w.groupNames.Store(gi.JID.String(), gi.Name)
+				w.groupInfos.Store(gi.JID.String(), g)
 			}
 			continue
 		}
