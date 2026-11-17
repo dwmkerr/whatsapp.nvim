@@ -17,7 +17,7 @@ Point at another file with `make demo FIXTURE=path/to/file.json`, or set `fixtur
 
 ### Growing the dataset
 
-The dataset is meant to grow. When a bug comes from a real account, add the smallest set of events that reproduces it, with invented people, and say why in the event's `note`. Keep existing chats stable so earlier recordings stay comparable; add new people and chats rather than rewriting old ones.
+The dataset is meant to grow. When a bug comes from a real account, add the smallest set of events that reproduces it, with invented people, and say why in the event's `note`. Keep existing chats stable so earlier recordings stay comparable; add new people and chats rather than rewriting old ones. Then add a row to the edge case table in the [README](../README.md#synthetic-account).
 
 ### Format
 
@@ -41,7 +41,7 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 | `type` | Fields | Replays as |
 | --- | --- | --- |
 | `history` | `progress`, `conversations` | `events.HistorySync`, one chunk of the sync after pairing |
-| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `quoted_text`, `quoted_from`, `push_name`, `at` | `events.Message`, live or replayed from offline |
+| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `quoted_text`, `quoted_from`, `edit_of`, `edit_kind`, `hd_of`, `poll`, `push_name`, `at` | `events.Message`, live or replayed from offline |
 | `mark_read` | `chat`, `read`, `full_sync`, `at` | `events.MarkChatAsRead`, the phone's mark read or unread |
 | `archive` | `chat`, `archived`, `full_sync`, `at` | `events.Archive` |
 | `read_receipt` | `chat`, `ids`, `at` | `events.Receipt` of type read from our own phone |
@@ -50,5 +50,7 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 | `group_info` | `chat`, `name`, `members`, `joined_only` | Not an event: group info requests for `chat` succeed from here on, and fail before it. `members` lists participant JIDs, `"me"` for you; a group without a subject has `members` and no `name`. With `joined_only`, only the joined-groups list names it |
 
 In messages, `from` is `"me"`, a contact's JID, or empty for the other person in a direct chat; group messages need it. `media` is one of `image`, `sticker`, `voice`, `video` or `document`. Media shows as a tag and has nothing to download.
+
+`edit_of` makes a message an edit of an earlier one from the same sender, with `text` as the new content. `edit_kind` is `secret` (the default), encrypted with the original's secret as group edits arrive, or `plain`, a protocol message. The fixture stores the secret form's content unencrypted, because it has no keys. `hd_of` makes an image the HD copy of an earlier image. `poll` is a poll's question, sent in the newest poll format.
 
 The bridge checks the whole file at startup and refuses unknown fields, event types and media, duplicate message ids and group messages without a sender. `TestSyntheticFixtureReplaysThroughTheBridge` replays the dataset on every `make test`.

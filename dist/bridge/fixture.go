@@ -101,6 +101,17 @@ type fixtureMsg struct {
 	QuotedFrom string `json:"quoted_from,omitempty"`
 	PushName   string `json:"push_name,omitempty"`
 	At         string `json:"at,omitempty"` // Go duration from the replay start ("-26h"), or RFC 3339
+	// EditOf makes this message an edit of an earlier one from the same
+	// sender, carrying text as its new content. EditKind picks the form:
+	// "secret" (the default) is encrypted with the original's secret, as
+	// group edits arrive; "plain" is a protocol message.
+	EditOf   string `json:"edit_of,omitempty"`
+	EditKind string `json:"edit_kind,omitempty"`
+	// HDOf makes this image the HD copy of an earlier image, which the
+	// phone sends straight after the first.
+	HDOf string `json:"hd_of,omitempty"`
+	// Poll is a poll's question, sent in the newest poll format.
+	Poll string `json:"poll,omitempty"`
 }
 
 func loadFixture(path string, clock time.Time) (*fixture, error) {
@@ -160,7 +171,38 @@ func parseFixtureJID(s string) (types.JID, error) {
 
 // message turns a fixture message into the protobuf the phone would send.
 // Media carries no downloadable payload, only enough for the bubble and tag.
-func (fx *fixture) message(m fixtureMsg) *waE2E.Message {
+// message builds the content of m. key is m's own key, which an edit
+// points back through.
+func (fx *fixture) message(m fixtureMsg, key *waCommon.MessageKey) *waE2E.Message {
+	if m.EditOf != "" {
+		target := proto.Clone(key).(*waCommon.MessageKey)
+		target.ID = proto.String(m.EditOf)
+		content := &waE2E.Message{Conversation: proto.String(m.Text)}
+		if m.EditKind == "plain" {
+			return &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+				Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(), Key: target, EditedMessage: content,
+			}}
+		}
+		payload, _ := proto.Marshal(content)
+		return &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
+			TargetMessageKey: target, EncPayload: payload, EncIV: make([]byte, 12),
+			SecretEncType: waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
+		}}
+	}
+	if m.HDOf != "" {
+		return &waE2E.Message{
+			AssociatedChildMessage: &waE2E.FutureProofMessage{Message: &waE2E.Message{
+				ImageMessage: &waE2E.ImageMessage{Caption: strOrNil(m.Caption), Mimetype: proto.String("image/jpeg")},
+			}},
+			MessageContextInfo: &waE2E.MessageContextInfo{MessageAssociation: &waE2E.MessageAssociation{
+				AssociationType:  waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD.Enum(),
+				ParentMessageKey: &waCommon.MessageKey{RemoteJID: key.RemoteJID, FromMe: key.FromMe, Participant: key.Participant, ID: proto.String(m.HDOf)},
+			}},
+		}
+	}
+	if m.Poll != "" {
+		return &waE2E.Message{PollCreationMessageV6: &waE2E.PollCreationMessage{Name: proto.String(m.Poll)}}
+	}
 	var ctxInfo *waE2E.ContextInfo
 	if m.ReplyTo != "" {
 		ctxInfo = &waE2E.ContextInfo{StanzaID: proto.String(m.ReplyTo)}
@@ -209,6 +251,17 @@ func (fx *fixture) checkMsg(chat types.JID, m fixtureMsg, id string) error {
 	if chat.Server == types.GroupServer && m.From == "" {
 		return fmt.Errorf("group message %s needs from", id)
 	}
+	switch m.EditKind {
+	case "", "secret", "plain":
+	default:
+		return fmt.Errorf("unknown edit_kind %q", m.EditKind)
+	}
+	if m.EditKind != "" && m.EditOf == "" {
+		return fmt.Errorf("message %s has edit_kind but no edit_of", id)
+	}
+	if m.HDOf != "" && m.Media != "image" {
+		return fmt.Errorf("message %s: hd_of needs media image", id)
+	}
 	return nil
 }
 
@@ -243,7 +296,7 @@ func (fx *fixture) webMessage(chat types.JID, m fixtureMsg, n int) (*waWeb.WebMe
 	}
 	return &waWeb.WebMessageInfo{
 		Key:              key,
-		Message:          fx.message(m),
+		Message:          fx.message(m, key),
 		MessageTimestamp: proto.Uint64(uint64(ts.Unix())),
 		PushName:         strOrNil(m.PushName),
 	}, nil
@@ -298,6 +351,10 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		key := &waCommon.MessageKey{RemoteJID: proto.String(chat.String()), FromMe: proto.Bool(fromMe), ID: proto.String(id)}
+		if chat.Server == types.GroupServer && !fromMe {
+			key.Participant = proto.String(sender.String())
+		}
 		return &events.Message{
 			Info: types.MessageInfo{
 				MessageSource: types.MessageSource{Chat: chat, Sender: sender, IsFromMe: fromMe, IsGroup: chat.Server == types.GroupServer},
@@ -305,7 +362,7 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 				PushName:      e.PushName,
 				Timestamp:     ts,
 			},
-			Message: fx.message(e.fixtureMsg),
+			Message: fx.message(e.fixtureMsg, key),
 		}, nil
 	case "mark_read":
 		chat, err := parseFixtureJID(e.Chat)
