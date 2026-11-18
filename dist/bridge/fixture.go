@@ -112,6 +112,9 @@ type fixtureMsg struct {
 	HDOf string `json:"hd_of,omitempty"`
 	// Poll is a poll's question, sent in the newest poll format.
 	Poll string `json:"poll,omitempty"`
+	// HistoryNotice is the number of recent messages the sender shared
+	// with members they just added, which arrives as a notice with no text.
+	HistoryNotice int64 `json:"history_notice,omitempty"`
 }
 
 func loadFixture(path string, clock time.Time) (*fixture, error) {
@@ -199,6 +202,11 @@ func (fx *fixture) message(m fixtureMsg, key *waCommon.MessageKey) *waE2E.Messag
 				ParentMessageKey: &waCommon.MessageKey{RemoteJID: key.RemoteJID, FromMe: key.FromMe, Participant: key.Participant, ID: proto.String(m.HDOf)},
 			}},
 		}
+	}
+	if m.HistoryNotice != 0 {
+		return &waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{
+			MessageHistoryMetadata: &waE2E.MessageHistoryMetadata{MessageCount: proto.Int64(m.HistoryNotice)},
+		}}
 	}
 	if m.Poll != "" {
 		return &waE2E.Message{PollCreationMessageV6: &waE2E.PollCreationMessage{Name: proto.String(m.Poll)}}
