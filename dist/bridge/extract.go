@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"mime"
 	"strings"
 
@@ -35,6 +36,20 @@ func poll(m *waE2E.Message) *waE2E.PollCreationMessage {
 		}
 	}
 	return nil
+}
+
+// historyNotice describes the notice a member sends when they add people to
+// a group and share recent messages with them. It carries no text, only
+// metadata, and the count is missing on some notices.
+func historyNotice(n *waE2E.MessageHistoryNotice) string {
+	switch c := n.GetMessageHistoryMetadata().GetMessageCount(); c {
+	case 0:
+		return "[history] shared recent messages with new members"
+	case 1:
+		return "[history] shared 1 recent message with new members"
+	default:
+		return fmt.Sprintf("[history] shared %d recent messages with new members", c)
+	}
 }
 
 func hdCopy(m *waE2E.Message) bool {
@@ -87,6 +102,8 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = "[location] " + m.LocationMessage.GetName()
 	case poll(m) != nil:
 		e.Text = "[poll] " + poll(m).GetName()
+	case m.MessageHistoryNotice != nil:
+		e.Text = historyNotice(m.MessageHistoryNotice)
 	// An album header only announces the photos that follow as ordinary
 	// image messages; the phone shows the photos, never the header. An HD
 	// photo is sent twice and the phone shows it once, so the second copy

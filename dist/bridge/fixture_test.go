@@ -386,3 +386,13 @@ func TestRepairUnsupportedRowsFromOlderBridges(t *testing.T) {
 		t.Errorf("a stored poll gets its question: %+v", m)
 	}
 }
+
+func TestHistoryNoticeSaysWhatWasShared(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	if m, _ := w.store.GetMessage("120363400000000001@g.us", "BW17"); m.Text != "[history] shared 25 recent messages with new members" {
+		t.Errorf("a shared history notice says how many messages were shared: %+v", m)
+	}
+	if got := extract(&waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{}}).Text; got != "[history] shared recent messages with new members" {
+		t.Errorf("a notice without a count still reads: %q", got)
+	}
+}
