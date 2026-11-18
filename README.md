@@ -135,6 +135,7 @@ The dataset grows with each bug found on a real account. It covers these edge ca
 | Edits: encrypted in a group, plain in a direct chat | Boulder Wednesdays, Ada | [#42](https://github.com/dwmkerr/whatsapp.nvim/issues/42) |
 | A photo sent in HD, which arrives twice | Boulder Wednesdays | [#43](https://github.com/dwmkerr/whatsapp.nvim/issues/43) |
 | A poll in the newest format | Boulder Wednesdays | [#44](https://github.com/dwmkerr/whatsapp.nvim/issues/44) |
+| Recent history shared with new group members, a notice with no text | Boulder Wednesdays | [#46](https://github.com/dwmkerr/whatsapp.nvim/issues/46) |
 
 I have found that when working live in WhatsApp, the best flow is:
 

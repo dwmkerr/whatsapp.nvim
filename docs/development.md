@@ -41,7 +41,7 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 | `type` | Fields | Replays as |
 | --- | --- | --- |
 | `history` | `progress`, `conversations` | `events.HistorySync`, one chunk of the sync after pairing |
-| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `quoted_text`, `quoted_from`, `edit_of`, `edit_kind`, `hd_of`, `poll`, `push_name`, `at` | `events.Message`, live or replayed from offline |
+| `message` | `chat`, `from`, `id`, `text`, `media`, `caption`, `filename`, `reply_to`, `quoted_text`, `quoted_from`, `edit_of`, `edit_kind`, `hd_of`, `poll`, `history_notice`, `push_name`, `at` | `events.Message`, live or replayed from offline |
 | `mark_read` | `chat`, `read`, `full_sync`, `at` | `events.MarkChatAsRead`, the phone's mark read or unread |
 | `archive` | `chat`, `archived`, `full_sync`, `at` | `events.Archive` |
 | `read_receipt` | `chat`, `ids`, `at` | `events.Receipt` of type read from our own phone |
@@ -51,6 +51,6 @@ Every event takes an optional `note` and `delay_ms`, a pause before the event so
 
 In messages, `from` is `"me"`, a contact's JID, or empty for the other person in a direct chat; group messages need it. `media` is one of `image`, `sticker`, `voice`, `video` or `document`. Media shows as a tag and has nothing to download.
 
-`edit_of` makes a message an edit of an earlier one from the same sender, with `text` as the new content. `edit_kind` is `secret` (the default), encrypted with the original's secret as group edits arrive, or `plain`, a protocol message. The fixture stores the secret form's content unencrypted, because it has no keys. `hd_of` makes an image the HD copy of an earlier image. `poll` is a poll's question, sent in the newest poll format.
+`edit_of` makes a message an edit of an earlier one from the same sender, with `text` as the new content. `edit_kind` is `secret` (the default), encrypted with the original's secret as group edits arrive, or `plain`, a protocol message. The fixture stores the secret form's content unencrypted, because it has no keys. `hd_of` makes an image the HD copy of an earlier image. `poll` is a poll's question, sent in the newest poll format. `history_notice` is the number of recent messages the sender shared with members they just added, sent as the notice the phone shows.
 
 The bridge checks the whole file at startup and refuses unknown fields, event types and media, duplicate message ids and group messages without a sender. `TestSyntheticFixtureReplaysThroughTheBridge` replays the dataset on every `make test`.
