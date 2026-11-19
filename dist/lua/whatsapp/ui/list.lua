@@ -143,6 +143,11 @@ function M.update_bar()
 end
 
 function M.render()
+  if not S.visible() then
+    S.stale.list = true
+    return
+  end
+  S.stale.list = nil
   local buf = M.ensure_buf()
   local width = S.text_width("list", S.opts.list_width)
   local chats = M.visible_chats()
