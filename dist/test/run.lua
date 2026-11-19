@@ -630,6 +630,35 @@ return function()
   events["pair.ok"]()
   check(S.qr == nil and not S.pairing and S.status.paired == true, "pair.ok clears the QR code")
 
+  -- Each open rebuilds the layout; its handlers must not pile up.
+  local function layout_handlers(event)
+    local ok, list = pcall(vim.api.nvim_get_autocmds, { group = "WhatsAppLayout", event = event })
+    return ok and #list or 0
+  end
+  for _ = 1, 3 do
+    wa.close()
+    wa.open()
+  end
+  check(layout_handlers("FocusGained") == 1 and layout_handlers("VimResized") == 1, "reopening keeps one copy of each layout handler")
+
+  -- A hidden tab skips renders and list refreshes, then catches up when
+  -- it is back on screen.
+  local wa_tab = S.tab
+  vim.cmd("tabnew")
+  local other_tab = vim.api.nvim_get_current_tabpage()
+  local chat_tick = vim.api.nvim_buf_get_changedtick(S.bufs.chat)
+  require("whatsapp.ui.chat").render()
+  events["chats.changed"]()
+  check(vim.api.nvim_buf_get_changedtick(S.bufs.chat) == chat_tick and S.stale.chat and S.stale.chats,
+    "hidden tab defers the chat render and the list refresh")
+  local list_tick = vim.api.nvim_buf_get_changedtick(S.bufs.list)
+  vim.api.nvim_set_current_tabpage(wa_tab)
+  check(vim.api.nvim_buf_get_changedtick(S.bufs.chat) > chat_tick and not S.stale.chat, "returning to the tab renders the chat")
+  check(wait_for(function() return vim.api.nvim_buf_get_changedtick(S.bufs.list) > list_tick end) and not S.stale.chats,
+    "returning to the tab refreshes the list")
+  vim.api.nvim_set_current_tabpage(other_tab)
+  vim.cmd("tabclose")
+
   -- logout closes the view, forgets the session and stops the bridge.
   wa.logout()
   check(wait_for(function() return not client.running() end), "logout stops the bridge")
@@ -637,6 +666,7 @@ return function()
 
   wa.close()
   check(not S.layout_valid(), "close tears down the tab")
+  check(layout_handlers("FocusGained") == 0, "close removes the layout handlers")
   client.stop()
 
   if failures > 0 then

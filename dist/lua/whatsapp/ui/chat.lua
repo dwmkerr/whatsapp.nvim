@@ -305,6 +305,11 @@ end
 -- unless the user has scrolled up to read history. opts.bottom forces the
 -- jump, for a message the user has just sent.
 function M.render(opts)
+  if not S.visible() then
+    S.stale.chat = true
+    return
+  end
+  S.stale.chat = nil
   local buf = M.ensure_buf()
   local msgs = S.current and S.messages[S.current] or {}
   local chat = S.current and S.chat_by_jid[S.current]
