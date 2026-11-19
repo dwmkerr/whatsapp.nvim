@@ -3,6 +3,7 @@ package main
 import (
 	"mime"
 	"strings"
+	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 )
@@ -16,6 +17,9 @@ type extracted struct {
 	Seconds   int   // media duration
 	Waveform  []int // voice note levels, 0-100
 	Skip      bool  // protocol noise with nothing to show
+	// History is set for the notice a member sends when they add people to
+	// a group and share recent messages with them.
+	History *waE2E.MessageHistoryMetadata
 }
 
 const unsupportedText = "[unsupported message]"
@@ -35,6 +39,21 @@ func poll(m *waE2E.Message) *waE2E.PollCreationMessage {
 		}
 	}
 	return nil
+}
+
+// historyText words the shared history notice as the phone does: "sent
+// Laura message history that starts on 17 Nov at 21:09". The phone shows
+// it as a line from the sender, so the bubble's header supplies the name.
+func historyText(receivers []string, since time.Time) string {
+	who := joinNames(receivers)
+	if who == "" {
+		who = "new members"
+	}
+	text := "[history] sent " + who + " message history"
+	if !since.IsZero() {
+		text += " that starts on " + since.Local().Format("2 Jan at 15:04")
+	}
+	return text
 }
 
 func hdCopy(m *waE2E.Message) bool {
@@ -87,6 +106,11 @@ func extract(m *waE2E.Message) extracted {
 		e.Text = "[location] " + m.LocationMessage.GetName()
 	case poll(m) != nil:
 		e.Text = "[poll] " + poll(m).GetName()
+	case m.MessageHistoryNotice != nil:
+		// Naming the receivers needs the contact store; WA.describe fills
+		// them in. This text is for callers without it.
+		e.History = m.MessageHistoryNotice.GetMessageHistoryMetadata()
+		e.Text = historyText(nil, time.Time{})
 	// An album header only announces the photos that follow as ordinary
 	// image messages; the phone shows the photos, never the header. An HD
 	// photo is sent twice and the phone shows it once, so the second copy
