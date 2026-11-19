@@ -7,7 +7,8 @@
     { "jid": "447700900104@s.whatsapp.net", "name": "Dev Patel-Ruiz" },
     { "jid": "447700900105@s.whatsapp.net", "name": "Elin Ward" },
     { "jid": "447700900106@s.whatsapp.net", "name": "Fitz Horne" },
-    { "jid": "447700900107@s.whatsapp.net", "name": "Gus Albright" }
+    { "jid": "447700900107@s.whatsapp.net", "name": "Gus Albright" },
+    { "jid": "447700900108@s.whatsapp.net", "name": "Hana Iqbal" }
   ],
   "groups": [
     { "jid": "120363400000000001@g.us", "name": "Boulder Wednesdays" },
@@ -18,7 +19,7 @@
   "events": [
     {
       "type": "history",
-      "note": "First history chunk after pairing: everyday chats with unread counts from the phone. #34: in Boulder Wednesdays, my reply to a document (no text to quote) and a reply to a message older than the stored history (only the copy in the reply). #43: a photo sent in HD arrives twice, the phone shows it once. #44: a poll in the newest format. #46: Cleo adds new members and shares recent history with them; the notice has no text.",
+      "note": "First history chunk after pairing: everyday chats with unread counts from the phone. #34: in Boulder Wednesdays, my reply to a document (no text to quote) and a reply to a message older than the stored history (only the copy in the reply). #43: a photo sent in HD arrives twice, the phone shows it once. #44: a poll in the newest format. #46: Cleo adds Hana and a stranger and shares recent history with them. The notice has no text, only who it went to and when the history starts; the phone names the stranger by number.",
       "progress": 35,
       "delay_ms": 600,
       "conversations": [
@@ -48,7 +49,7 @@
             { "id": "BW14", "from": "447700900103@s.whatsapp.net", "media": "image", "caption": "Found some at the market", "at": "-2h35m" },
             { "id": "BW15", "from": "447700900103@s.whatsapp.net", "media": "image", "caption": "Found some at the market", "hd_of": "BW14", "at": "-2h35m" },
             { "id": "BW16", "from": "447700900102@s.whatsapp.net", "poll": "Pub after?", "at": "-2h20m" },
-            { "id": "BW17", "from": "447700900103@s.whatsapp.net", "history_notice": 25, "at": "-2h15m" }
+            { "id": "BW17", "from": "447700900103@s.whatsapp.net", "history_notice": { "to": ["447700900108@s.whatsapp.net", "447700900199@s.whatsapp.net"], "since": "-2h40m" }, "at": "-2h15m" }
           ]
         },
         {

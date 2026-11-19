@@ -112,9 +112,14 @@ type fixtureMsg struct {
 	HDOf string `json:"hd_of,omitempty"`
 	// Poll is a poll's question, sent in the newest poll format.
 	Poll string `json:"poll,omitempty"`
-	// HistoryNotice is the number of recent messages the sender shared
-	// with members they just added, which arrives as a notice with no text.
-	HistoryNotice int64 `json:"history_notice,omitempty"`
+	// HistoryNotice makes this the notice a member sends when they add
+	// people to a group and share recent messages with them.
+	HistoryNotice *fixtureHistory `json:"history_notice,omitempty"`
+}
+
+type fixtureHistory struct {
+	To    []string `json:"to"`    // JIDs of the people the history went to
+	Since string   `json:"since"` // when the shared history starts, like "at"
 }
 
 func loadFixture(path string, clock time.Time) (*fixture, error) {
@@ -203,10 +208,12 @@ func (fx *fixture) message(m fixtureMsg, key *waCommon.MessageKey) *waE2E.Messag
 			}},
 		}
 	}
-	if m.HistoryNotice != 0 {
-		return &waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{
-			MessageHistoryMetadata: &waE2E.MessageHistoryMetadata{MessageCount: proto.Int64(m.HistoryNotice)},
-		}}
+	if h := m.HistoryNotice; h != nil {
+		md := &waE2E.MessageHistoryMetadata{HistoryReceivers: h.To}
+		if since, err := fx.at(h.Since); err == nil && h.Since != "" {
+			md.OldestMessageTimestampInWindow = proto.Int64(since.Unix())
+		}
+		return &waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{MessageHistoryMetadata: md}}
 	}
 	if m.Poll != "" {
 		return &waE2E.Message{PollCreationMessageV6: &waE2E.PollCreationMessage{Name: proto.String(m.Poll)}}
@@ -269,6 +276,19 @@ func (fx *fixture) checkMsg(chat types.JID, m fixtureMsg, id string) error {
 	}
 	if m.HDOf != "" && m.Media != "image" {
 		return fmt.Errorf("message %s: hd_of needs media image", id)
+	}
+	if h := m.HistoryNotice; h != nil {
+		if len(h.To) == 0 {
+			return fmt.Errorf("message %s: history_notice needs to", id)
+		}
+		for _, j := range h.To {
+			if _, err := parseFixtureJID(j); err != nil {
+				return fmt.Errorf("message %s: history_notice to %q: %w", id, j, err)
+			}
+		}
+		if _, err := fx.at(h.Since); h.Since != "" && err != nil {
+			return fmt.Errorf("message %s: history_notice since: %w", id, err)
+		}
 	}
 	return nil
 }

@@ -400,6 +400,7 @@ func (w *WA) handleMessage(evt *events.Message, live bool) {
 	if e.Skip {
 		return
 	}
+	w.describe(ctx, &e)
 	chat := w.canonical(ctx, evt.Info.Chat, evt.Info.RecipientAlt)
 	sender := w.canonical(ctx, evt.Info.Sender, evt.Info.SenderAlt)
 	if evt.Info.IsFromMe {
@@ -1021,6 +1022,7 @@ func (w *WA) RepairUnsupported(ctx context.Context) int {
 			continue
 		}
 		e := extract(&pm)
+		w.describe(ctx, &e)
 		switch {
 		case e.Skip:
 			_ = w.store.DeleteMessage(r.ChatJID, r.ID)
@@ -1275,6 +1277,32 @@ func (w *WA) joinedGroups(ctx context.Context) (map[string]groupMeta, error) {
 		out[g.JID.String()] = groupMeta{Name: g.Name, Members: g.Participants}
 	}
 	return out, nil
+}
+
+// describe adds what extract can't know without the contact store: the
+// names of the people a shared history notice went to.
+func (w *WA) describe(ctx context.Context, e *extracted) {
+	if e.History == nil {
+		return
+	}
+	var names []string
+	for _, r := range e.History.GetHistoryReceivers() {
+		j, err := types.ParseJID(r)
+		if err != nil {
+			continue
+		}
+		p := types.GroupParticipant{JID: w.canonical(ctx, j, types.EmptyJID), LID: j}
+		if w.isMe(p) {
+			names = append(names, "you")
+		} else if n := w.participantName(ctx, p); n != "" {
+			names = append(names, n)
+		}
+	}
+	var since time.Time
+	if ts := e.History.GetOldestMessageTimestampInWindow(); ts > 0 {
+		since = time.Unix(ts, 0)
+	}
+	e.Text = historyText(names, since)
 }
 
 // membersName names a group without a subject the way the phone does: the

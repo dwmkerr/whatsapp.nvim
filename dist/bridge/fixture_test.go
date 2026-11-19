@@ -389,10 +389,15 @@ func TestRepairUnsupportedRowsFromOlderBridges(t *testing.T) {
 
 func TestHistoryNoticeSaysWhatWasShared(t *testing.T) {
 	w, _ := replayFixture(t, syntheticFixture)
-	if m, _ := w.store.GetMessage("120363400000000001@g.us", "BW17"); m.Text != "[history] shared 25 recent messages with new members" {
-		t.Errorf("a shared history notice says how many messages were shared: %+v", m)
+	m, _ := w.store.GetMessage("120363400000000001@g.us", "BW17")
+	if want := "[history] sent Hana Iqbal & +447700900199 message history that starts on "; !strings.HasPrefix(m.Text, want) {
+		t.Errorf("a shared history notice names who it went to, a stranger by number: got %q, want %q...", m.Text, want)
 	}
-	if got := extract(&waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{}}).Text; got != "[history] shared recent messages with new members" {
-		t.Errorf("a notice without a count still reads: %q", got)
+	since := time.Date(2026, 11, 17, 21, 9, 0, 0, time.Local)
+	if got := historyText([]string{"Laura"}, since); got != "[history] sent Laura message history that starts on 17 Nov at 21:09" {
+		t.Errorf("worded as the phone words it: %q", got)
+	}
+	if got := extract(&waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{}}).Text; got != "[history] sent new members message history" {
+		t.Errorf("a notice with nothing in it still reads: %q", got)
 	}
 }
