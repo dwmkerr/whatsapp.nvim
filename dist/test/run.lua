@@ -547,7 +547,7 @@ return function()
   wa.toggle_help()
   local help_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(S.help and vim.api.nvim_get_current_win() == S.wins.chat, "g? shows help in the chat pane and focuses it")
-  check(help_text:find("conversation", 1, true) ~= nil and help_text:find(":WhatsApp pair", 1, true) ~= nil, "help lists panes and commands")
+  check(help_text:find("conversation", 1, true) ~= nil and help_text:find(":WhatsApp login", 1, true) ~= nil, "help lists panes and commands")
   wa.toggle_help()
   local back_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(not S.help and vim.api.nvim_get_current_win() == S.wins.list, "closing help returns focus to the list")
@@ -634,6 +634,16 @@ return function()
   wa.logout()
   check(wait_for(function() return not client.running() end), "logout stops the bridge")
   check(not S.layout_valid() and S.status.paired == false, "logout closes the tab and clears paired state")
+  check(S.current == nil and next(S.messages) == nil and #S.chats == 0 and next(S.drafts) == nil,
+    "logout forgets the open chat, messages, chats and drafts")
+
+  -- :WhatsApp login is what people type after logout; it pairs, and the
+  -- pane shows the QR code, not the last chat of the old session.
+  vim.cmd("WhatsApp login")
+  check(wait_for(function() return S.qr ~= nil end), ":WhatsApp login starts pairing")
+  local relinked = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(relinked:find("hello", 1, true) == nil, "reopening after logout shows no old messages")
+  events["pair.ok"]()
 
   wa.close()
   check(not S.layout_valid(), "close tears down the tab")

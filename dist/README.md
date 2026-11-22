@@ -46,7 +46,7 @@ lazy.nvim:
 Then pair once:
 
 ```
-:WhatsApp pair
+:WhatsApp login
 ```
 
 Scan the QR code from your phone: WhatsApp > Settings > Linked Devices > Link a Device. History syncs in the background.
@@ -62,7 +62,7 @@ While a chat is open and the terminal has focus the device is marked online, so 
 | `:WhatsApp` | Open (or jump to) the WhatsApp tab |
 | `:WhatsApp toggle` | Open or close |
 | `:WhatsApp Alice` | Open and jump to the chat matching "Alice" |
-| `:WhatsApp pair` | Show the pairing QR code in the chat pane |
+| `:WhatsApp login` | Show the pairing QR code in the chat pane (`pair` also works) |
 | `:WhatsApp logout` | Unlink this device from your phone and forget the local session |
 | `:WhatsApp status` | Bridge status |
 | `:WhatsApp stop` | Close and kill the bridge |

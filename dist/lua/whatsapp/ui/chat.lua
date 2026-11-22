@@ -240,7 +240,7 @@ local function splash(width, height)
   elseif S.status.paired == false then
     note("not paired")
     rows[#rows + 1] = {}
-    key(":WhatsApp pair", "links this device")
+    key(":WhatsApp login", "links this device")
     rows[#rows + 1] = {}
     note("then scan the code with WhatsApp > Linked Devices")
   elseif S.replaced then

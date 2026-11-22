@@ -79,13 +79,19 @@ function M.start(bin, store_dir, fixture)
   if fixture then
     vim.list_extend(cmd, { "-fixture", fixture })
   end
-  proc = vim.system(cmd, {
+  local this
+  this = vim.system(cmd, {
     stdin = true,
     text = true,
     stdout = on_stdout,
     stderr = on_stderr,
   }, function(res)
     vim.schedule(function()
+      -- A bridge stopped by M.stop can exit after its replacement started,
+      -- e.g. logout then login; it must not take the new one down with it.
+      if proc ~= this then
+        return
+      end
       proc = nil
       for id, cb in pairs(pending) do
         pending[id] = nil
@@ -96,6 +102,7 @@ function M.start(bin, store_dir, fixture)
       end
     end)
   end)
+  proc = this
   return true
 end
 

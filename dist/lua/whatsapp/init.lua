@@ -125,6 +125,25 @@ local function start_typing(d)
   end
 end
 
+-- The bridge wipes its store on logout; the editor's copy has to go too,
+-- or reopening shows the last chat of an account that is no longer linked.
+local function forget_session()
+  stop_typing()
+  S.current = nil
+  S.messages = {}
+  S.set_chats({})
+  for _, draft in pairs(S.drafts) do
+    if draft.buf and vim.api.nvim_buf_is_valid(draft.buf) then
+      vim.api.nvim_buf_delete(draft.buf, { force = true })
+    end
+  end
+  S.drafts = {}
+  S.wins.compose = nil
+  require("whatsapp.ui.images").reset()
+  chat.render()
+  list.render()
+end
+
 -- Bridge events ------------------------------------------------------------
 
 local function wire_events()
@@ -138,7 +157,7 @@ local function wire_events()
   client.on("unpaired", function()
     S.status.paired = false
     chat.render()
-    notify("not paired yet, run :WhatsApp pair", vim.log.levels.WARN)
+    notify("not paired yet, run :WhatsApp login", vim.log.levels.WARN)
   end)
   client.on("connected", function()
     S.status.connected = true
@@ -160,10 +179,11 @@ local function wire_events()
     S.status.paired = false
     S.status.connected = false
     S.synced = false
+    forget_session()
     if d and d.reason == "user" then
       return
     end
-    notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp pair", vim.log.levels.ERROR)
+    notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp login", vim.log.levels.ERROR)
   end)
   client.on("pair.qr", function(d)
     S.pairing = false
@@ -186,7 +206,7 @@ local function wire_events()
   end)
   client.on("pair.timeout", function()
     end_pairing()
-    notify("pairing timed out, run :WhatsApp pair again", vim.log.levels.WARN)
+    notify("pairing timed out, run :WhatsApp login again", vim.log.levels.WARN)
   end)
   client.on("pair.error", function(d)
     end_pairing()
@@ -910,7 +930,7 @@ function M.pair()
 end
 
 -- Unlink this device from the phone and forget the local session. Stops the
--- bridge so the next :WhatsApp pair starts with a clean device store.
+-- bridge so the next :WhatsApp login starts with a clean device store.
 function M.logout()
   if not client.running() then
     notify("bridge not running")
@@ -922,7 +942,7 @@ function M.logout()
     if err then
       notify(err, vim.log.levels.WARN)
     end
-    notify("logged out, run :WhatsApp pair to link again")
+    notify("logged out, run :WhatsApp login to link again")
   end)
 end
 
