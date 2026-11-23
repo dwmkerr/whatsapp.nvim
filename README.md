@@ -133,7 +133,7 @@ The dataset grows with each bug found on a real account. It covers these edge ca
 | Group named only by the joined-groups list | Harbour Swimmers | [#36](https://github.com/dwmkerr/whatsapp.nvim/issues/36) |
 | Group without a subject, named after its members | Ada, Bram & Gus | [#39](https://github.com/dwmkerr/whatsapp.nvim/issues/39) |
 | Edits: encrypted in a group, plain in a direct chat | Boulder Wednesdays, Ada | [#42](https://github.com/dwmkerr/whatsapp.nvim/issues/42) |
-| A photo sent in HD, which arrives twice | Boulder Wednesdays | [#43](https://github.com/dwmkerr/whatsapp.nvim/issues/43) |
+| A photo or video sent in HD, which arrives twice | Boulder Wednesdays | [#43](https://github.com/dwmkerr/whatsapp.nvim/issues/43) |
 | A poll in the newest format | Boulder Wednesdays | [#44](https://github.com/dwmkerr/whatsapp.nvim/issues/44) |
 | Recent history shared with new group members, a notice with no text | Boulder Wednesdays | [#46](https://github.com/dwmkerr/whatsapp.nvim/issues/46) |
 
