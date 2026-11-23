@@ -92,3 +92,21 @@ func TestMediaMIMECannotChooseAnotherFileType(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractSkipsSecondCopies(t *testing.T) {
+	for _, a := range []waE2E.MessageAssociation_AssociationType{
+		waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD,
+		waE2E.MessageAssociation_HD_VIDEO_DUAL_UPLOAD,
+		waE2E.MessageAssociation_HEVC_VIDEO_DUAL_UPLOAD,
+		waE2E.MessageAssociation_STREAMED_HD_VIDEO_DUAL_UPLOAD,
+		waE2E.MessageAssociation_MOTION_PHOTO,
+	} {
+		e := extract(&waE2E.Message{
+			AssociatedChildMessage: &waE2E.FutureProofMessage{Message: &waE2E.Message{VideoMessage: &waE2E.VideoMessage{}}},
+			MessageContextInfo:     &waE2E.MessageContextInfo{MessageAssociation: &waE2E.MessageAssociation{AssociationType: a.Enum()}},
+		})
+		if !e.Skip {
+			t.Errorf("%v: the phone shows this media once, so the second copy is skipped: %+v", a, e)
+		}
+	}
+}
