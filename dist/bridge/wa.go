@@ -1225,8 +1225,8 @@ func (o *offlineProgress) step() (int, bool) {
 	return p, true
 }
 
-// learnArchive fetches the archive snapshot once for a store that predates
-// the archived column, so upgrading does not leave archived chats in the
+// learnArchive fetches the archive snapshot once for a store that may have
+// missed archive flags, so upgrading does not leave archived chats in the
 // list until the next re-pair. Archive actions live in regular_low.
 func (w *WA) learnArchive() {
 	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {

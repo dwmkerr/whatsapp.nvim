@@ -50,8 +50,9 @@ type Message struct {
 
 type Store struct {
 	db *sql.DB
-	// ArchiveUnknown is set when this open added the archived column, so the
-	// chats already stored have never heard which of them are archived.
+	// ArchiveUnknown is set when the chats already stored may not know which
+	// of them are archived: the store predates the archived column, or the
+	// bridge that filled it dropped flags that arrived before their chat.
 	ArchiveUnknown bool
 }
 
@@ -105,8 +106,36 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate messages: %w", err)
 	}
+	stale, err := archiveStale(db)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate chats: %w", err)
+	}
 	restrictFile(path)
-	return &Store{db: db, ArchiveUnknown: added}, nil
+	return &Store{db: db, ArchiveUnknown: added || stale}, nil
+}
+
+// archiveVersion marks a store whose archive flags were kept even when the
+// flag arrived before the chat. Older stores lost some of those.
+const archiveVersion = 1
+
+// archiveStale reports whether a store with chats in it was filled before
+// archiveVersion, and stamps the store so it only asks once.
+func archiveStale(db *sql.DB) (bool, error) {
+	var version, chats int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return false, err
+	}
+	if version >= archiveVersion {
+		return false, nil
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM chats`).Scan(&chats); err != nil {
+		return false, err
+	}
+	if _, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, archiveVersion)); err != nil {
+		return false, err
+	}
+	return chats > 0, nil
 }
 
 // addColumn brings a store created by an older bridge up to the current
@@ -242,8 +271,15 @@ func (s *Store) ClearUnread(jid string) error {
 	return err
 }
 
+// SetArchived creates the row when the chat is not stored yet. Right after
+// pairing the archive snapshot lands minutes before history stores the
+// chats it names, and an update alone would drop the flag for good. The row
+// stays out of the list until a message gives it a timestamp.
 func (s *Store) SetArchived(jid string, archived bool) error {
-	_, err := s.db.Exec(`UPDATE chats SET archived = ? WHERE jid = ?`, boolInt(archived), jid)
+	_, err := s.db.Exec(`
+		INSERT INTO chats (jid, is_group, archived) VALUES (?, ?, ?)
+		ON CONFLICT(jid) DO UPDATE SET archived = excluded.archived`,
+		jid, boolInt(strings.HasSuffix(jid, "@g.us")), boolInt(archived))
 	return err
 }
 
