@@ -73,10 +73,12 @@ func TestRenameChatFixesHistory(t *testing.T) {
 	s := newTestStore(t)
 	must(t, s.UpsertChat("447@s.whatsapp.net", "447", false, 10))
 	must(t, s.UpsertChat("448@s.whatsapp.net", "Named", false, 10))
+	// Stored by bridges before numberName; picked up again so they recover.
+	must(t, s.UpsertChat("449@s.whatsapp.net", "+449", false, 10))
 	_, _ = s.InsertMessage(Message{ID: "1", ChatJID: "447@s.whatsapp.net", Sender: "447@s.whatsapp.net", SenderName: "447", Text: "x", TS: 10})
 	unnamed, err := s.UnnamedChats()
 	must(t, err)
-	if len(unnamed) != 1 || unnamed[0].JID != "447@s.whatsapp.net" {
+	if len(unnamed) != 2 || unnamed[0].JID == "448@s.whatsapp.net" || unnamed[1].JID == "448@s.whatsapp.net" {
 		t.Fatalf("got %+v", unnamed)
 	}
 	must(t, s.RenameChat("447@s.whatsapp.net", "Alice"))

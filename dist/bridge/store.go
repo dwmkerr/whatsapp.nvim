@@ -207,6 +207,7 @@ func (s *Store) UnnamedChats() ([]Chat, error) {
 	// lookup failed; retrying them is how those stores recover.
 	rows, err := s.db.Query(`SELECT jid, name, is_group FROM chats WHERE name = ''
 		OR name = substr(jid, 1, instr(jid, '@') - 1)
+		OR name = '+' || substr(jid, 1, instr(jid, '@') - 1)
 		OR (is_group = 1 AND name = 'Group ' || substr(jid, 1, instr(jid, '@') - 1))`)
 	if err != nil {
 		return nil, err
