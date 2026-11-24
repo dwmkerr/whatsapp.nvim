@@ -543,6 +543,23 @@ func (w *WA) replay(fx *fixture, pace float64) {
 			}
 			continue
 		}
+		// whatsmeow keeps app state from a full sync away from event
+		// handlers unless the client asks for it. Replaying it regardless
+		// hid that the bridge never asked, so archive and unread marks from
+		// pairing worked here and never on a phone.
+		if fullSyncAppState(evt) && !w.cli.EmitAppStateEventsOnFullSync {
+			continue
+		}
 		w.handleEvent(evt)
 	}
+}
+
+func fullSyncAppState(evt interface{}) bool {
+	switch v := evt.(type) {
+	case *events.MarkChatAsRead:
+		return v.FromFullSync
+	case *events.Archive:
+		return v.FromFullSync
+	}
+	return false
 }

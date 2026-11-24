@@ -78,6 +78,9 @@ func NewWA(ctx context.Context, dir string, out *Writer) (*WA, error) {
 	}
 	w := &WA{cli: whatsmeow.NewClient(device, log.Sub("client")), store: st, out: out, dir: dir, log: log,
 		downloads: make(chan struct{}, 2)}
+	// Archive and unread marks set on the phone before pairing only arrive in
+	// the app state snapshot, which whatsmeow otherwise keeps to its own store.
+	w.cli.EmitAppStateEventsOnFullSync = true
 	w.cli.AddEventHandler(w.handleEvent)
 	return w, nil
 }
