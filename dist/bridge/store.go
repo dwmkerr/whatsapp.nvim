@@ -230,13 +230,15 @@ func (s *Store) MembersName(jid string) string {
 	return name
 }
 
-// UnnamedChats lists chats whose name is still the bare phone number or empty.
+// UnnamedChats lists chats whose name is still a phone number, in full or
+// masked, or empty.
 func (s *Store) UnnamedChats() ([]Chat, error) {
 	// 'Group <id>' rows were stored as names by older bridges when a group
 	// lookup failed; retrying them is how those stores recover.
 	rows, err := s.db.Query(`SELECT jid, name, is_group FROM chats WHERE name = ''
 		OR name = substr(jid, 1, instr(jid, '@') - 1)
 		OR name = '+' || substr(jid, 1, instr(jid, '@') - 1)
+		OR (name LIKE '+%' AND instr(name, '∙') > 0)
 		OR (is_group = 1 AND name = 'Group ' || substr(jid, 1, instr(jid, '@') - 1))`)
 	if err != nil {
 		return nil, err
