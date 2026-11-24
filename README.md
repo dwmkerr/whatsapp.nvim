@@ -25,7 +25,7 @@ Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 }
 ```
 
-Run `:WhatsApp pair`, then go to WhatsApp > Settings > Linked Devices to scan the QR code and pair. Run `:WhatsApp` at any time to open the WhatsApp view, or start Neovim straight into it with `nvim +WhatsApp`.
+Run `:WhatsApp login`, then go to WhatsApp > Settings > Linked Devices to scan the QR code and pair. Run `:WhatsApp` at any time to open the WhatsApp view, or start Neovim straight into it with `nvim +WhatsApp`.
 
 ## Features
 
@@ -35,7 +35,7 @@ When you run `:WhatsApp` you'll get a splash screen showing the most essential s
 
 ![Splash screen with the main shortcuts](./docs/splash.png)
 
-Use the `:WhatsApp pair` command to connect. On your mobile go to Settings > Linked Devices > Link a Device and scan the code shown in the right-hand pane. `:WhatsApp logout` unlinks the device again and forgets the local session.
+Use the `:WhatsApp login` command to connect. On your mobile go to Settings > Linked Devices > Link a Device and scan the code shown in the right-hand pane. `:WhatsApp logout` unlinks the device again and forgets the local session.
 
 ![Pairing QR code in the chat pane](./docs/qr.png)
 

@@ -5,7 +5,7 @@ local M = {}
 local commands = {
   { ":WhatsApp", "open, or jump to the WhatsApp tab" },
   { ":WhatsApp Alice", "open the chat matching Alice" },
-  { ":WhatsApp pair", "link this device (shows the QR code)" },
+  { ":WhatsApp login", "link this device (shows the QR code)" },
   { ":WhatsApp logout", "unlink this device" },
   { ":WhatsApp stop", "close and stop the bridge" },
 }
