@@ -125,6 +125,25 @@ local function start_typing(d)
   end
 end
 
+-- The bridge wipes its store on logout; the editor's copy has to go too,
+-- or reopening shows the last chat of an account that is no longer linked.
+local function forget_session()
+  stop_typing()
+  S.current = nil
+  S.messages = {}
+  S.set_chats({})
+  for _, draft in pairs(S.drafts) do
+    if draft.buf and vim.api.nvim_buf_is_valid(draft.buf) then
+      vim.api.nvim_buf_delete(draft.buf, { force = true })
+    end
+  end
+  S.drafts = {}
+  S.wins.compose = nil
+  require("whatsapp.ui.images").reset()
+  chat.render()
+  list.render()
+end
+
 -- Bridge events ------------------------------------------------------------
 
 local function wire_events()
@@ -138,7 +157,7 @@ local function wire_events()
   client.on("unpaired", function()
     S.status.paired = false
     chat.render()
-    notify("not paired yet, run :WhatsApp pair", vim.log.levels.WARN)
+    notify("not paired yet, run :WhatsApp login", vim.log.levels.WARN)
   end)
   client.on("connected", function()
     S.status.connected = true
@@ -160,10 +179,11 @@ local function wire_events()
     S.status.paired = false
     S.status.connected = false
     S.synced = false
+    forget_session()
     if d and d.reason == "user" then
       return
     end
-    notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp pair", vim.log.levels.ERROR)
+    notify("logged out (" .. (d and d.reason or "?") .. "), run :WhatsApp login", vim.log.levels.ERROR)
   end)
   client.on("pair.qr", function(d)
     S.pairing = false
@@ -186,7 +206,7 @@ local function wire_events()
   end)
   client.on("pair.timeout", function()
     end_pairing()
-    notify("pairing timed out, run :WhatsApp pair again", vim.log.levels.WARN)
+    notify("pairing timed out, run :WhatsApp login again", vim.log.levels.WARN)
   end)
   client.on("pair.error", function(d)
     end_pairing()
@@ -372,6 +392,10 @@ function M.refresh_chats_soon()
   if refresh_timer then
     return
   end
+  if not S.visible() then
+    S.stale.chats = true
+    return
+  end
   refresh_timer = vim.defer_fn(function()
     refresh_timer = nil
     M.refresh_chats()
@@ -384,6 +408,7 @@ function M.refresh_chats()
     refresh_timer:close()
     refresh_timer = nil
   end
+  S.stale.chats = nil
   client.request("chats.list", nil, function(err, chats)
     if err then
       notify(err, vim.log.levels.ERROR)
@@ -778,6 +803,41 @@ function M.ensure_compose()
   compose.update_winbar()
 end
 
+local LAYOUT_GROUP = "WhatsAppLayout"
+local resize_timer
+
+local function drop_layout_autocmds()
+  pcall(vim.api.nvim_del_augroup_by_name, LAYOUT_GROUP)
+  if resize_timer then
+    resize_timer:stop()
+    resize_timer:close()
+    resize_timer = nil
+  end
+end
+
+-- Bring the tab up to date when it is back on screen: renders and list
+-- refreshes were skipped while it was hidden, and the terminal may be a
+-- new one that holds none of the pictures.
+local function catch_up(focus)
+  local images = require("whatsapp.ui.images")
+  if images.client_changed() then
+    images.forget_sent()
+    S.stale.chat = true
+  end
+  if focus and S.current then
+    set_presence(true)
+  end
+  if S.stale.chats then
+    M.refresh_chats()
+  end
+  if (focus and S.current) or S.stale.chat then
+    chat.render()
+  end
+  if S.stale.list then
+    list.render()
+  end
+end
+
 local function build_layout()
   vim.cmd("tabnew")
   S.tab = vim.api.nvim_get_current_tabpage()
@@ -791,49 +851,74 @@ local function build_layout()
   apply_win_opts("list")
 
   require("whatsapp.ui.images").client_changed()
+  -- One group, cleared on every build: the layout is rebuilt on each open,
+  -- and without it every open added another copy of each handler.
+  local group = vim.api.nvim_create_augroup(LAYOUT_GROUP, { clear = true })
   vim.api.nvim_create_autocmd("WinScrolled", {
+    group = group,
     callback = function()
-      require("whatsapp.ui.images").send_visible()
+      -- The pattern only matches the first window that scrolled, so check
+      -- the event's window list instead.
+      if S.win_valid("chat") and vim.v.event[tostring(S.wins.chat)] then
+        require("whatsapp.ui.images").send_visible()
+      end
     end,
   })
   vim.api.nvim_create_autocmd({ "WinEnter", "InsertEnter", "InsertLeave", "FocusGained", "FocusLost" }, {
+    group = group,
     callback = function(ev)
+      if ev.event == "FocusLost" then
+        set_presence(false)
+      end
+      -- In tmux, focus fires on every pane switch; the work below only
+      -- matters when the WhatsApp tab is on screen, and TabEnter catches up.
+      if not S.visible() then
+        return
+      end
       local w = vim.api.nvim_get_current_win()
       for name, win in pairs(S.wins) do
         if win == w then
           apply_win_opts(name)
         end
       end
-      if ev.event == "FocusLost" then
-        set_presence(false)
-      elseif ev.event == "FocusGained" then
-        -- Focus is the only signal that the terminal may have changed
-        -- under us; a new terminal holds none of the pictures.
-        local images = require("whatsapp.ui.images")
-        if images.client_changed() then
-          images.forget_sent()
-        end
-        if S.current and S.layout_valid() then
-          set_presence(true)
-          chat.render()
-        end
+      if ev.event == "FocusGained" then
+        catch_up(true)
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("TabEnter", {
+    group = group,
+    callback = function()
+      if S.visible() then
+        catch_up(false)
       end
     end,
   })
   vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+    group = group,
     callback = function()
-      if S.layout_valid() then
-        chat.render()
-        list.render()
-        compose.update_winbar()
+      if not S.visible() then
+        S.stale.chat, S.stale.list = true, true
+        return
       end
+      -- Dragging a split or resizing the terminal fires a burst of these;
+      -- one render at the end is enough.
+      resize_timer = resize_timer or vim.uv.new_timer()
+      resize_timer:start(50, 0, vim.schedule_wrap(function()
+        if S.visible() then
+          chat.render()
+          list.render()
+          compose.update_winbar()
+        end
+      end))
     end,
   })
   vim.api.nvim_create_autocmd("TabClosed", {
-    once = true,
+    group = group,
     callback = function()
       if not S.layout_valid() then
         S.reset_layout()
+        drop_layout_autocmds()
       end
     end,
   })
@@ -882,6 +967,7 @@ function M.close()
     pcall(vim.cmd, "tabclose")
   end
   S.reset_layout()
+  drop_layout_autocmds()
 end
 
 function M.stop()
@@ -910,7 +996,7 @@ function M.pair()
 end
 
 -- Unlink this device from the phone and forget the local session. Stops the
--- bridge so the next :WhatsApp pair starts with a clean device store.
+-- bridge so the next :WhatsApp login starts with a clean device store.
 function M.logout()
   if not client.running() then
     notify("bridge not running")
@@ -922,7 +1008,7 @@ function M.logout()
     if err then
       notify(err, vim.log.levels.WARN)
     end
-    notify("logged out, run :WhatsApp pair to link again")
+    notify("logged out, run :WhatsApp login to link again")
   end)
 end
 

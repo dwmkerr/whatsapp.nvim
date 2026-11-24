@@ -73,10 +73,12 @@ func TestRenameChatFixesHistory(t *testing.T) {
 	s := newTestStore(t)
 	must(t, s.UpsertChat("447@s.whatsapp.net", "447", false, 10))
 	must(t, s.UpsertChat("448@s.whatsapp.net", "Named", false, 10))
+	// Stored by bridges before numberName; picked up again so they recover.
+	must(t, s.UpsertChat("449@s.whatsapp.net", "+449", false, 10))
 	_, _ = s.InsertMessage(Message{ID: "1", ChatJID: "447@s.whatsapp.net", Sender: "447@s.whatsapp.net", SenderName: "447", Text: "x", TS: 10})
 	unnamed, err := s.UnnamedChats()
 	must(t, err)
-	if len(unnamed) != 1 || unnamed[0].JID != "447@s.whatsapp.net" {
+	if len(unnamed) != 2 || unnamed[0].JID == "448@s.whatsapp.net" || unnamed[1].JID == "448@s.whatsapp.net" {
 		t.Fatalf("got %+v", unnamed)
 	}
 	must(t, s.RenameChat("447@s.whatsapp.net", "Alice"))
@@ -192,5 +194,55 @@ func TestOldStoreGainsArchivedColumnOnce(t *testing.T) {
 	defer s.Close()
 	if s.ArchiveUnknown {
 		t.Error("the second open finds the column and asks nothing")
+	}
+}
+
+func TestArchiveBeforeTheChatIsKept(t *testing.T) {
+	s, err := OpenStore(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	// After pairing the archive snapshot lands before history stores the chat.
+	if err := s.SetArchived("9@g.us", true); err != nil {
+		t.Fatal(err)
+	}
+	if chats, _ := s.ListChats(); len(chats) != 0 {
+		t.Errorf("a chat with no messages stays out of the list: %+v", chats)
+	}
+	if err := s.UpsertChat("9@g.us", "Improvers", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetChat("9@g.us"); !c.Archived || !c.IsGroup || c.Name != "Improvers" {
+		t.Errorf("history keeps the flag that arrived first: %+v", c)
+	}
+}
+
+func TestOlderStoresAskForTheArchiveOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ArchiveUnknown {
+		t.Error("an empty store has nothing to repair")
+	}
+	if err := s.UpsertChat("9@g.us", "Improvers", true, 100); err != nil {
+		t.Fatal(err)
+	}
+	// A store filled by a bridge that dropped early archive flags.
+	if _, err := s.db.Exec(`PRAGMA user_version = 0`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	for i, want := range []bool{true, false} {
+		s, err = OpenStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.ArchiveUnknown != want {
+			t.Errorf("open %d: ArchiveUnknown = %v, want %v", i+1, s.ArchiveUnknown, want)
+		}
+		s.Close()
 	}
 }

@@ -4,13 +4,17 @@ local format = require("whatsapp.format")
 local M = {}
 local ns = vim.api.nvim_create_namespace("whatsapp_list")
 local line_jids = {}
+-- The row of the Archived entry, and the first chat row below the header
+-- lines. Both move as the Archived entry comes and goes.
+local archived_row, first_row = nil, 2
 
 -- Filters in the order f cycles them, matching the chips on the phone.
+-- Archived is not one of them: the phone keeps archived chats behind a row
+-- at the top of the list, and S.filter == "archived" is that opened view.
 local filters = {
   { id = "all", label = "All", empty = "no chats yet" },
   { id = "unread", label = "Unread", empty = "no unread chats" },
   { id = "groups", label = "Groups", empty = "no groups" },
-  { id = "archived", label = "Archived", empty = "no archived chats" },
 }
 
 local function filter_index()
@@ -23,8 +27,8 @@ local function filter_index()
 end
 
 local function keep_chat(c)
-  -- Archived chats only show under their own filter, as on the phone, so
-  -- the chats the user put away never crowd the others.
+  -- Archived chats only show in their own view, as on the phone, so the
+  -- chats the user put away never crowd the others.
   if S.filter == "archived" then
     return c.archived == true
   elseif c.archived then
@@ -50,13 +54,51 @@ function M.visible_chats()
   return out
 end
 
-function M.cycle_filter()
-  S.filter = filters[filter_index() % #filters + 1].id
+local function set_filter(id)
+  S.filter = id
   M.render()
   -- The old cursor row rarely means anything under a new filter; start at
   -- the first chat so <CR> does something useful straight away.
   if S.win_valid("list") then
-    vim.api.nvim_win_set_cursor(S.wins.list, { math.min(2, vim.api.nvim_buf_line_count(S.bufs.list)), 0 })
+    vim.api.nvim_win_set_cursor(S.wins.list, { math.min(first_row, vim.api.nvim_buf_line_count(S.bufs.list)), 0 })
+  end
+end
+
+function M.cycle_filter()
+  if S.filter == "archived" then
+    set_filter("all")
+  else
+    set_filter(filters[filter_index() % #filters + 1].id)
+  end
+end
+
+function M.open_archived()
+  set_filter("archived")
+end
+
+-- Returns false outside the archived view, so q can fall back to closing.
+function M.close_archived()
+  if S.filter ~= "archived" then
+    return false
+  end
+  set_filter("all")
+  return true
+end
+
+local function cursor_row()
+  return vim.api.nvim_win_get_cursor(S.wins.list)[1]
+end
+
+-- <CR> and l act on whatever the row is: a chat, the Archived entry, or
+-- the header line.
+local function activate(wa)
+  local row = cursor_row()
+  if row == archived_row then
+    M.open_archived()
+  elseif row == 1 and not M.close_archived() then
+    M.cycle_filter()
+  elseif row > 1 then
+    wa.open_chat(M.jid_under_cursor())
   end
 end
 
@@ -77,15 +119,16 @@ function M.ensure_buf()
   local map = function(lhs, fn, desc)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true, desc = desc })
   end
-  map("<CR>", function()
-    if vim.api.nvim_win_get_cursor(0)[1] == 1 then
-      M.cycle_filter()
+  map("<CR>", function() activate(wa) end, "Open chat or archived chats, or cycle the filter")
+  map("f", M.cycle_filter, "Filter: all / unread / groups")
+  map("l", function()
+    if cursor_row() == archived_row then
+      M.open_archived()
     else
       wa.open_chat(M.jid_under_cursor())
     end
-  end, "Open chat, or cycle the filter")
-  map("f", M.cycle_filter, "Filter: all / unread / groups / archived")
-  map("l", function() wa.open_chat(M.jid_under_cursor()) end, "Open chat")
+  end, "Open chat")
+  map("<BS>", M.close_archived, "Leave archived chats")
   map("i", function()
     wa.open_chat(M.jid_under_cursor())
     wa.focus_compose()
@@ -103,7 +146,11 @@ function M.ensure_buf()
   map("[m", function() wa.next_media(-1) end, "Previous media in the open chat")
   map("K", wa.load_older, "Load older messages in the open chat")
   map("L", function() require("whatsapp.ui.chat").toggle_layout() end, "Toggle bubbles / lines")
-  map("q", wa.close, "Close WhatsApp")
+  map("q", function()
+    if not M.close_archived() then
+      wa.close()
+    end
+  end, "Leave archived chats, or close WhatsApp")
   map("g?", wa.toggle_help, "All keys")
   return buf
 end
@@ -143,35 +190,70 @@ function M.update_bar()
 end
 
 function M.render()
+  if not S.visible() then
+    S.stale.list = true
+    return
+  end
+  S.stale.list = nil
   local buf = M.ensure_buf()
   local width = S.text_width("list", S.opts.list_width)
   local chats = M.visible_chats()
   local lines, jids, unread = format.chat_list(chats, width, S.opts.unread_count)
 
-  -- Row 1 is the filter line, so every chat row sits one below its index.
+  -- Row 1 is the filter line, or the way back out of the archived view.
   -- The key leads in Special like every other hint; the active chip is bold
   -- rather than coloured so it never reads as a key.
-  local header, spans, col = "f ", { { 0, 1, "Special" } }, 2
-  for i, f in ipairs(filters) do
-    if i > 1 then
-      header = header .. "  "
-      col = col + 2
+  local header, spans, col, empty
+  if S.filter == "archived" then
+    header = "q ← Archived"
+    spans = { { 0, 1, "Special" }, { 2, #header, "WhatsAppFilter" } }
+    empty = "no archived chats"
+  else
+    header, spans, col = "f ", { { 0, 1, "Special" } }, 2
+    for i, f in ipairs(filters) do
+      if i > 1 then
+        header = header .. "  "
+        col = col + 2
+      end
+      spans[#spans + 1] = { col, col + #f.label, f.id == S.filter and "WhatsAppFilter" or "Comment" }
+      header = header .. f.label
+      col = col + #f.label
     end
-    spans[#spans + 1] = { col, col + #f.label, f.id == S.filter and "WhatsAppFilter" or "Comment" }
-    header = header .. f.label
-    col = col + #f.label
+    empty = filters[filter_index()].empty
   end
   table.insert(lines, 1, header)
   table.insert(jids, 1, false)
   table.insert(unread, 1, false)
+
+  -- Under All the archived chats sit behind one row at the top, as on the
+  -- phone. It never looks unread: archived chats stay quiet until opened.
+  local was_archived_row = archived_row
+  archived_row = nil
+  local archived = 0
+  for _, c in ipairs(S.chats) do
+    if c.archived then
+      archived = archived + 1
+    end
+  end
+  if S.filter == "all" and archived > 0 then
+    local count = tostring(archived)
+    table.insert(lines, 2, "  " .. string.format("%-" .. math.max(4, width - 3 - #count) .. "s", "Archived") .. " " .. count)
+    table.insert(jids, 2, false)
+    table.insert(unread, 2, false)
+    archived_row = 2
+  end
+  first_row = (archived_row or 1) + 1
   if #chats == 0 then
-    lines[2] = "  " .. filters[filter_index()].empty
+    lines[first_row] = "  " .. empty
   end
 
   M.update_bar()
   -- Read the cursor's chat before line_jids changes; afterwards the same row
   -- names whichever chat moved into it.
-  local keep = M.jid_under_cursor() or S.current
+  -- Someone who moved onto the Archived row keeps it; jumping back to the
+  -- open chat on every redraw would make it hard to reach.
+  local on_archived = S.win_valid("list") and was_archived_row ~= nil and cursor_row() == was_archived_row
+  local keep = M.jid_under_cursor() or (not on_archived and S.current)
   line_jids = jids
 
   vim.bo[buf].modifiable = true
@@ -181,8 +263,11 @@ function M.render()
   for _, sp in ipairs(spans) do
     vim.api.nvim_buf_set_extmark(buf, ns, 0, sp[1], { end_col = sp[2], hl_group = sp[3] })
   end
+  if archived_row then
+    vim.api.nvim_buf_set_extmark(buf, ns, archived_row - 1, 0, { line_hl_group = "Comment" })
+  end
   if #chats == 0 then
-    vim.api.nvim_buf_set_extmark(buf, ns, 1, 0, { line_hl_group = "Comment" })
+    vim.api.nvim_buf_set_extmark(buf, ns, first_row - 1, 0, { line_hl_group = "Comment" })
   end
   for i, jid in ipairs(jids) do
     if unread[i] then
@@ -199,10 +284,10 @@ function M.render()
         break
       end
     end
-  elseif S.win_valid("list") and #chats > 0 and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 1 then
+  elseif S.win_valid("list") and #chats > 0 and cursor_row() == 1 then
     -- A fresh window opens on row 1, which would hide the f under the
     -- cursor and make <CR> cycle the filter instead of opening a chat.
-    vim.api.nvim_win_set_cursor(S.wins.list, { 2, 0 })
+    vim.api.nvim_win_set_cursor(S.wins.list, { first_row, 0 })
   end
 end
 

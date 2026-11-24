@@ -7,6 +7,8 @@ local subcommands = {
   open = function() require("whatsapp").open() end,
   toggle = function() require("whatsapp").toggle() end,
   close = function() require("whatsapp").close() end,
+  login = function() require("whatsapp").pair() end,
+  -- The older name, kept so existing habits and scripts still work.
   pair = function() require("whatsapp").pair() end,
   logout = function() require("whatsapp").logout() end,
   status = function() require("whatsapp").status() end,

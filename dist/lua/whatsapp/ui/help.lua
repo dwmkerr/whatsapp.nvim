@@ -5,7 +5,7 @@ local M = {}
 local commands = {
   { ":WhatsApp", "open, or jump to the WhatsApp tab" },
   { ":WhatsApp Alice", "open the chat matching Alice" },
-  { ":WhatsApp pair", "link this device (shows the QR code)" },
+  { ":WhatsApp login", "link this device (shows the QR code)" },
   { ":WhatsApp logout", "unlink this device" },
   { ":WhatsApp stop", "close and stop the bridge" },
 }
@@ -15,7 +15,9 @@ local keys = {
     { "<CR> l", "open chat" },
     { "i", "open chat and compose" },
     { "u", "next unread chat" },
-    { "f", "filter: all / unread / groups / archived" },
+    { "f", "filter: all / unread / groups" },
+    { "<CR>", "on Archived: archived chats" },
+    { "q <BS>", "leave archived chats" },
     { "gU gu ~", "mark unread / read / toggle" },
     { "gx ]m [m", "open / next / previous media in the open chat" },
     { "K L", "older messages / toggle layout in the open chat" },

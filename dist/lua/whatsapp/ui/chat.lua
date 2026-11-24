@@ -240,7 +240,7 @@ local function splash(width, height)
   elseif S.status.paired == false then
     note("not paired")
     rows[#rows + 1] = {}
-    key(":WhatsApp pair", "links this device")
+    key(":WhatsApp login", "links this device")
     rows[#rows + 1] = {}
     note("then scan the code with WhatsApp > Linked Devices")
   elseif S.replaced then
@@ -305,6 +305,11 @@ end
 -- unless the user has scrolled up to read history. opts.bottom forces the
 -- jump, for a message the user has just sent.
 function M.render(opts)
+  if not S.visible() then
+    S.stale.chat = true
+    return
+  end
+  S.stale.chat = nil
   local buf = M.ensure_buf()
   local msgs = S.current and S.messages[S.current] or {}
   local chat = S.current and S.chat_by_jid[S.current]

@@ -162,7 +162,7 @@ return function()
 
   local list_lines = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
   check(#list_lines == 3 and list_lines[2]:find("Alice", 1, true) ~= nil, "list buffer shows the filter line then Alice first")
-  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil and list_lines[1]:find("Archived", 1, true) ~= nil, "filter line names every filter")
+  check(list_lines[1]:find("All", 1, true) ~= nil and list_lines[1]:find("Unread", 1, true) ~= nil and list_lines[1]:find("Groups", 1, true) ~= nil and list_lines[1]:find("Archived", 1, true) == nil, "filter line names every filter, and archived is not one")
   check(vim.startswith(list_lines[1], "f "), "filter line leads with its key")
   check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "cursor starts on the first chat, not the filter line")
 
@@ -180,10 +180,7 @@ return function()
   check(list.jid_under_cursor() == nil, "filter line has no chat")
   vim.api.nvim_set_current_win(S.wins.list)
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
-  check(S.filter == "archived" and vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("no archived chats", 1, true) ~= nil, "<CR> on the filter line cycles to archived, empty here")
-  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
-  check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all")
+  check(S.filter == "all" and #vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false) == 3, "<CR> on the filter line cycles back to all, with no Archived row when nothing is archived")
   S.filter = "groups"
   list.render()
   check(vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("Climbing", 1, true) ~= nil, "render honours a preset filter")
@@ -209,8 +206,9 @@ return function()
   check(S.current == "111@s.whatsapp.net" and vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "u wraps to the unread chat past the filter line")
   S.current = nil
 
-  -- Archived chats only show under their own filter and stay out of every
-  -- count, so a busy archived group cannot bury the chats that matter.
+  -- Archived chats sit behind one row under All, as on the phone, and stay
+  -- out of every count, so a busy archived group cannot bury the chats that
+  -- matter.
   local chat_ui = require("whatsapp.ui.chat")
   local before_chats = S.chats
   local with_archived = vim.deepcopy(before_chats)
@@ -222,20 +220,53 @@ return function()
   }))
   list.render()
   local rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
-  check(#rows == 3 and not table.concat(rows, "\n"):find("Five-a-side", 1, true), "all leaves archived chats out")
+  check(#rows == 4 and not table.concat(rows, "\n"):find("Five-a-side", 1, true), "all leaves archived chats out")
+  check(rows[2]:match("^  Archived +1$") ~= nil and vim.fn.strdisplaywidth(rows[2]) == vim.fn.strdisplaywidth(rows[3]), "an Archived row with the count sits above the chats, as wide as a chat row: " .. rows[2])
+  local row_hl = vim.api.nvim_buf_get_extmarks(S.bufs.list, vim.api.nvim_create_namespace("whatsapp_list"), { 1, 0 }, { 1, -1 }, { details = true })
+  check(#row_hl == 1 and row_hl[1][4].line_hl_group == "Comment", "the Archived row never looks unread")
+  check(list.jid_under_cursor() ~= nil, "the cursor stays on a chat, not the Archived row")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 2, 0 })
+  S.current = "111@s.whatsapp.net"
+  list.render()
+  check(vim.api.nvim_win_get_cursor(S.wins.list)[1] == 2, "a redraw leaves the cursor on the Archived row")
+  S.current = nil
   check(list_bar():find("1 unread", 1, true) ~= nil, "winbar unread count leaves archived chats out: " .. list_bar())
   chat_ui.render()
   check(splash_has("2 chats · 1 unread"), "splash counts leave archived chats out")
   S.filter = "groups"
   list.render()
-  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "groups leaves archived groups out")
+  rows = table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n")
+  check(not rows:find("Five-a-side", 1, true) and not rows:find("\n  Archived", 1, true), "groups leaves archived groups out, and has no Archived row")
   S.filter = "unread"
   list.render()
-  check(not table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n"):find("Five-a-side", 1, true), "unread leaves archived chats out")
-  S.filter = "archived"
+  rows = table.concat(vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false), "\n")
+  check(not rows:find("Five-a-side", 1, true) and not rows:find("\n  Archived", 1, true), "unread leaves archived chats out, and has no Archived row")
+  S.filter = "all"
   list.render()
+  local feed = function(keys)
+    vim.api.nvim_set_current_win(S.wins.list)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "x", false)
+  end
+  vim.api.nvim_win_set_cursor(S.wins.list, { 2, 0 })
+  feed("<CR>")
   rows = vim.api.nvim_buf_get_lines(S.bufs.list, 0, -1, false)
-  check(#rows == 2 and rows[2]:find("Five-a-side", 1, true) ~= nil and list.jid_under_cursor() == "333@g.us", "archived filter lists only archived chats")
+  check(S.filter == "archived" and rows[1] == "q ← Archived" and #rows == 2 and rows[2]:find("Five-a-side", 1, true) ~= nil, "<CR> on the Archived row lists only archived chats")
+  check(list.jid_under_cursor() == "333@g.us" and vim.api.nvim_buf_get_lines(S.bufs.list, 1, 2, false)[1]:find("●", 1, true) ~= nil, "the archived view parks on the first chat and keeps its unread mark")
+  check(list_bar():find("1 unread", 1, true) ~= nil, "the winbar still counts only the inbox: " .. list_bar())
+  feed("q")
+  check(S.filter == "all" and S.layout_valid() and list.jid_under_cursor() ~= nil, "q leaves the archived view without closing WhatsApp")
+  vim.api.nvim_win_set_cursor(S.wins.list, { 2, 0 })
+  feed("l")
+  check(S.filter == "archived", "l on the Archived row opens it too")
+  feed("<BS>")
+  check(S.filter == "all", "<BS> leaves the archived view")
+  list.open_archived()
+  vim.api.nvim_win_set_cursor(S.wins.list, { 1, 0 })
+  feed("<CR>")
+  check(S.filter == "all", "<CR> on the header leaves the archived view")
+  list.open_archived()
+  feed("f")
+  check(S.filter == "all", "f from the archived view returns to All")
   S.filter = "all"
   S.set_chats(before_chats)
   list.render()
@@ -547,7 +578,7 @@ return function()
   wa.toggle_help()
   local help_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(S.help and vim.api.nvim_get_current_win() == S.wins.chat, "g? shows help in the chat pane and focuses it")
-  check(help_text:find("conversation", 1, true) ~= nil and help_text:find(":WhatsApp pair", 1, true) ~= nil, "help lists panes and commands")
+  check(help_text:find("conversation", 1, true) ~= nil and help_text:find(":WhatsApp login", 1, true) ~= nil, "help lists panes and commands")
   wa.toggle_help()
   local back_text = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
   check(not S.help and vim.api.nvim_get_current_win() == S.wins.list, "closing help returns focus to the list")
@@ -630,13 +661,53 @@ return function()
   events["pair.ok"]()
   check(S.qr == nil and not S.pairing and S.status.paired == true, "pair.ok clears the QR code")
 
+  -- Each open rebuilds the layout; its handlers must not pile up.
+  local function layout_handlers(event)
+    local ok, list = pcall(vim.api.nvim_get_autocmds, { group = "WhatsAppLayout", event = event })
+    return ok and #list or 0
+  end
+  for _ = 1, 3 do
+    wa.close()
+    wa.open()
+  end
+  check(layout_handlers("FocusGained") == 1 and layout_handlers("VimResized") == 1, "reopening keeps one copy of each layout handler")
+
+  -- A hidden tab skips renders and list refreshes, then catches up when
+  -- it is back on screen.
+  local wa_tab = S.tab
+  vim.cmd("tabnew")
+  local other_tab = vim.api.nvim_get_current_tabpage()
+  local chat_tick = vim.api.nvim_buf_get_changedtick(S.bufs.chat)
+  require("whatsapp.ui.chat").render()
+  events["chats.changed"]()
+  check(vim.api.nvim_buf_get_changedtick(S.bufs.chat) == chat_tick and S.stale.chat and S.stale.chats,
+    "hidden tab defers the chat render and the list refresh")
+  local list_tick = vim.api.nvim_buf_get_changedtick(S.bufs.list)
+  vim.api.nvim_set_current_tabpage(wa_tab)
+  check(vim.api.nvim_buf_get_changedtick(S.bufs.chat) > chat_tick and not S.stale.chat, "returning to the tab renders the chat")
+  check(wait_for(function() return vim.api.nvim_buf_get_changedtick(S.bufs.list) > list_tick end) and not S.stale.chats,
+    "returning to the tab refreshes the list")
+  vim.api.nvim_set_current_tabpage(other_tab)
+  vim.cmd("tabclose")
+
   -- logout closes the view, forgets the session and stops the bridge.
   wa.logout()
   check(wait_for(function() return not client.running() end), "logout stops the bridge")
   check(not S.layout_valid() and S.status.paired == false, "logout closes the tab and clears paired state")
+  check(S.current == nil and next(S.messages) == nil and #S.chats == 0 and next(S.drafts) == nil,
+    "logout forgets the open chat, messages, chats and drafts")
+
+  -- :WhatsApp login is what people type after logout; it pairs, and the
+  -- pane shows the QR code, not the last chat of the old session.
+  vim.cmd("WhatsApp login")
+  check(wait_for(function() return S.qr ~= nil end), ":WhatsApp login starts pairing")
+  local relinked = table.concat(vim.api.nvim_buf_get_lines(S.bufs.chat, 0, -1, false), "\n")
+  check(relinked:find("hello", 1, true) == nil, "reopening after logout shows no old messages")
+  events["pair.ok"]()
 
   wa.close()
   check(not S.layout_valid(), "close tears down the tab")
+  check(layout_handlers("FocusGained") == 0, "close removes the layout handlers")
   client.stop()
 
   if failures > 0 then

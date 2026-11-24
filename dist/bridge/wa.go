@@ -304,12 +304,19 @@ func (w *WA) handleEvent(evt interface{}) {
 		jid := v.JID.ToNonAD().String()
 		if _, known := w.names.Load(jid); !known && v.NewPushName != "" {
 			w.names.Store(jid, v.NewPushName)
-			if w.store.ChatName(jid) == v.JID.User {
+			if numberName(w.store.ChatName(jid), v.JID.User) {
 				_ = w.store.RenameChat(jid, v.NewPushName)
 				w.out.Emit("chats.changed", nil)
 			}
 		}
 	}
+}
+
+// numberName reports whether name is only user's phone number. The phone
+// sends one for some saved contacts in history, and it must never hide the
+// contact's name.
+func numberName(name, user string) bool {
+	return name == user || name == "+"+user
 }
 
 // RefreshNames replaces bare phone numbers with contact or group names now
@@ -484,10 +491,11 @@ func (w *WA) handleHistorySync(evt *events.HistorySync) {
 		if err != nil {
 			continue
 		}
-		if n := conv.GetDisplayName(); n != "" {
-			w.names.Store(jid.String(), n)
-		} else if n := conv.GetName(); n != "" {
-			w.names.Store(jid.String(), n)
+		for _, n := range []string{conv.GetDisplayName(), conv.GetName()} {
+			if n != "" && !numberName(n, jid.User) {
+				w.names.Store(jid.String(), n)
+				break
+			}
 		}
 		for _, hm := range conv.GetMessages() {
 			parsed, err := w.cli.ParseWebMessage(jid, hm.GetMessage())
@@ -1225,8 +1233,8 @@ func (o *offlineProgress) step() (int, bool) {
 	return p, true
 }
 
-// learnArchive fetches the archive snapshot once for a store that predates
-// the archived column, so upgrading does not leave archived chats in the
+// learnArchive fetches the archive snapshot once for a store that may have
+// missed archive flags, so upgrading does not leave archived chats in the
 // list until the next re-pair. Archive actions live in regular_low.
 func (w *WA) learnArchive() {
 	if err := w.cli.FetchAppState(context.Background(), appstate.WAPatchRegularLow, true, false); err != nil {

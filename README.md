@@ -25,7 +25,7 @@ Plug 'dwmkerr/whatsapp.nvim', { 'rtp': 'dist', 'do': 'make build' }
 }
 ```
 
-Run `:WhatsApp pair`, then go to WhatsApp > Settings > Linked Devices to scan the QR code and pair. Run `:WhatsApp` at any time to open the WhatsApp view, or start Neovim straight into it with `nvim +WhatsApp`.
+Run `:WhatsApp login`, then go to WhatsApp > Settings > Linked Devices to scan the QR code and pair. Run `:WhatsApp` at any time to open the WhatsApp view, or start Neovim straight into it with `nvim +WhatsApp`.
 
 ## Features
 
@@ -35,7 +35,7 @@ When you run `:WhatsApp` you'll get a splash screen showing the most essential s
 
 ![Splash screen with the main shortcuts](./docs/splash.png)
 
-Use the `:WhatsApp pair` command to connect. On your mobile go to Settings > Linked Devices > Link a Device and scan the code shown in the right-hand pane. `:WhatsApp logout` unlinks the device again and forgets the local session.
+Use the `:WhatsApp login` command to connect. On your mobile go to Settings > Linked Devices > Link a Device and scan the code shown in the right-hand pane. `:WhatsApp logout` unlinks the device again and forgets the local session.
 
 ![Pairing QR code in the chat pane](./docs/qr.png)
 
@@ -45,7 +45,8 @@ The list of chats is shown on the left. Threads with unread messages are shown i
 
 - `<CR>` opens the chat under the cursor, `i` opens it and starts composing
 - `u` jumps to the next unread chat
-- `f` cycles the filter on the line under the title: all, unread, groups, archived (`<CR>` on that line does the same)
+- `f` cycles the filter on the line under the title: all, unread, groups (`<CR>` on that line does the same)
+- Archived chats stay out of the list, as on the phone: `<CR>` on the Archived row at the top opens them, `q` or `<BS>` goes back
 - `gU` / `gu` / `~` mark unread / read / toggle, mirrored to your phone (as a reminder, think of read as lowercase and unread as uppercase)
 - `<Tab>` / `<S-Tab>` cycle between the list, the conversation and the compose pane
 - `R` replies to the message under the cursor, `r` reacts to it
@@ -136,6 +137,7 @@ The dataset grows with each bug found on a real account. It covers these edge ca
 | A photo or video sent in HD, which arrives twice | Boulder Wednesdays | [#43](https://github.com/dwmkerr/whatsapp.nvim/issues/43) |
 | A poll in the newest format | Boulder Wednesdays | [#44](https://github.com/dwmkerr/whatsapp.nvim/issues/44) |
 | Recent history shared with new group members, a notice with no text | Boulder Wednesdays | [#46](https://github.com/dwmkerr/whatsapp.nvim/issues/46) |
+| A saved contact whose history arrives named by their number | Elin | |
 
 I have found that when working live in WhatsApp, the best flow is:
 
