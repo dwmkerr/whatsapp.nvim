@@ -52,7 +52,7 @@ type Store struct {
 	db *sql.DB
 	// ArchiveUnknown is set when the chats already stored may not know which
 	// of them are archived: the store predates the archived column, or the
-	// bridge that filled it dropped flags that arrived before their chat.
+	// bridge that filled it dropped the archive snapshot sent after pairing.
 	ArchiveUnknown bool
 }
 
@@ -115,9 +115,10 @@ func OpenStore(path string) (*Store, error) {
 	return &Store{db: db, ArchiveUnknown: added || stale}, nil
 }
 
-// archiveVersion marks a store whose archive flags were kept even when the
-// flag arrived before the chat. Older stores lost some of those.
-const archiveVersion = 1
+// archiveVersion marks a store filled by a bridge that kept every archive
+// flag. Before 1, flags that arrived before their chat were lost; before 2,
+// whatsmeow never passed the archive snapshot to the bridge at all.
+const archiveVersion = 2
 
 // archiveStale reports whether a store with chats in it was filled before
 // archiveVersion, and stamps the store so it only asks once.
