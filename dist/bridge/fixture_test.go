@@ -73,6 +73,9 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	if _, ok := by["Elin Ward"]; !ok {
 		t.Errorf("a saved contact whose history arrives named by number keeps the contact name: %+v", by)
 	}
+	if _, ok := by["Iris Novak"]; !ok {
+		t.Errorf("a saved contact whose history arrives named by a masked number keeps the contact name: %+v", by)
+	}
 
 	msgs, err := w.store.ListMessages(by["Ada Fenwick"].JID, 10, 0)
 	if err != nil {

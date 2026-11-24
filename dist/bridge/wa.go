@@ -312,12 +312,27 @@ func (w *WA) handleEvent(evt interface{}) {
 	}
 }
 
-// numberName reports whether name is only user's phone number. The phone
-// sends one for some saved contacts in history, and it must never hide the
-// contact's name.
+// numberName reports whether name is only user's phone number, in full or
+// with the middle digits hidden behind maskDigit. The phone sends both for
+// some saved contacts in history, and they must never hide the contact's name.
 func numberName(name, user string) bool {
-	return name == user || name == "+"+user
+	if name == user || name == "+"+user {
+		return true
+	}
+	digits := []rune(strings.TrimPrefix(name, "+"))
+	if len(digits) != len(user) || !strings.ContainsRune(name, maskDigit) {
+		return false
+	}
+	for i, r := range digits {
+		if r != maskDigit && r != rune(user[i]) {
+			return false
+		}
+	}
+	return true
 }
+
+// maskDigit stands in for each hidden digit of a masked phone number.
+const maskDigit = '\u2219'
 
 // RefreshNames replaces bare phone numbers with contact or group names now
 // that the contact store has caught up. Returns how many chats changed.
@@ -361,7 +376,7 @@ func (w *WA) RefreshNames(ctx context.Context) int {
 		} else {
 			name = w.contactName(ctx, jid)
 		}
-		if name != "" && name != jid.User {
+		if name != "" && !numberName(name, jid.User) {
 			w.names.Store(c.JID, name)
 			if w.store.RenameChat(c.JID, name) == nil {
 				changed++
