@@ -107,7 +107,7 @@ type fixtureMsg struct {
 	// group edits arrive; "plain" is a protocol message.
 	EditOf   string `json:"edit_of,omitempty"`
 	EditKind string `json:"edit_kind,omitempty"`
-	// HDOf makes this image the HD copy of an earlier image, which the
+	// HDOf makes this image or video the HD copy of an earlier one, which the
 	// phone sends straight after the first.
 	HDOf string `json:"hd_of,omitempty"`
 	// Poll is a poll's question, sent in the newest poll format.
@@ -198,12 +198,16 @@ func (fx *fixture) message(m fixtureMsg, key *waCommon.MessageKey) *waE2E.Messag
 		}}
 	}
 	if m.HDOf != "" {
+		child := &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: strOrNil(m.Caption), Mimetype: proto.String("image/jpeg")}}
+		assoc := waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD
+		if m.Media == "video" {
+			child = &waE2E.Message{VideoMessage: &waE2E.VideoMessage{Caption: strOrNil(m.Caption), Mimetype: proto.String("video/mp4")}}
+			assoc = waE2E.MessageAssociation_HD_VIDEO_DUAL_UPLOAD
+		}
 		return &waE2E.Message{
-			AssociatedChildMessage: &waE2E.FutureProofMessage{Message: &waE2E.Message{
-				ImageMessage: &waE2E.ImageMessage{Caption: strOrNil(m.Caption), Mimetype: proto.String("image/jpeg")},
-			}},
+			AssociatedChildMessage: &waE2E.FutureProofMessage{Message: child},
 			MessageContextInfo: &waE2E.MessageContextInfo{MessageAssociation: &waE2E.MessageAssociation{
-				AssociationType:  waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD.Enum(),
+				AssociationType:  assoc.Enum(),
 				ParentMessageKey: &waCommon.MessageKey{RemoteJID: key.RemoteJID, FromMe: key.FromMe, Participant: key.Participant, ID: proto.String(m.HDOf)},
 			}},
 		}
@@ -274,8 +278,8 @@ func (fx *fixture) checkMsg(chat types.JID, m fixtureMsg, id string) error {
 	if m.EditKind != "" && m.EditOf == "" {
 		return fmt.Errorf("message %s has edit_kind but no edit_of", id)
 	}
-	if m.HDOf != "" && m.Media != "image" {
-		return fmt.Errorf("message %s: hd_of needs media image", id)
+	if m.HDOf != "" && m.Media != "image" && m.Media != "video" {
+		return fmt.Errorf("message %s: hd_of needs media image or video", id)
 	}
 	if h := m.HistoryNotice; h != nil {
 		if len(h.To) == 0 {

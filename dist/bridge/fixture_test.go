@@ -346,6 +346,12 @@ func TestHDCopyAndNewPollsReadLikeThePhone(t *testing.T) {
 	if _, err := w.store.GetMessage(chat, "BW15"); err == nil {
 		t.Error("the HD copy of a photo is not stored as a second photo")
 	}
+	if _, err := w.store.GetMessage(chat, "BW19"); err == nil {
+		t.Error("the HD copy of a video is not stored as a second video")
+	}
+	if m, err := w.store.GetMessage(chat, "BW18"); err != nil || m.MediaType != "video" {
+		t.Errorf("the video sent in HD shows once, as a video: %+v %v", m, err)
+	}
 	if m, _ := w.store.GetMessage(chat, "BW16"); m.Text != "[poll] Pub after?" {
 		t.Errorf("a poll in the newest format shows its question: %+v", m)
 	}

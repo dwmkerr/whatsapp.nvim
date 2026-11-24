@@ -56,9 +56,20 @@ func historyText(receivers []string, since time.Time) string {
 	return text
 }
 
-func hdCopy(m *waE2E.Message) bool {
+// Second copies of media the phone shows once: the HD upload of a photo or
+// video sent in HD, and the video half of a motion photo, whose still image
+// arrives as an ordinary photo.
+var secondCopies = map[waE2E.MessageAssociation_AssociationType]bool{
+	waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD:          true,
+	waE2E.MessageAssociation_HD_VIDEO_DUAL_UPLOAD:          true,
+	waE2E.MessageAssociation_HEVC_VIDEO_DUAL_UPLOAD:        true,
+	waE2E.MessageAssociation_STREAMED_HD_VIDEO_DUAL_UPLOAD: true,
+	waE2E.MessageAssociation_MOTION_PHOTO:                  true,
+}
+
+func secondCopy(m *waE2E.Message) bool {
 	return m.AssociatedChildMessage != nil &&
-		m.GetMessageContextInfo().GetMessageAssociation().GetAssociationType() == waE2E.MessageAssociation_HD_IMAGE_DUAL_UPLOAD
+		secondCopies[m.GetMessageContextInfo().GetMessageAssociation().GetAssociationType()]
 }
 
 func extract(m *waE2E.Message) extracted {
@@ -112,13 +123,12 @@ func extract(m *waE2E.Message) extracted {
 		e.History = m.MessageHistoryNotice.GetMessageHistoryMetadata()
 		e.Text = historyText(nil, time.Time{})
 	// An album header only announces the photos that follow as ordinary
-	// image messages; the phone shows the photos, never the header. An HD
-	// photo is sent twice and the phone shows it once, so the second copy
-	// is skipped. Edits change an earlier message (see WA.edit) rather than
+	// image messages; the phone shows the photos, never the header. Second
+	// copies (see secondCopies) are skipped. Edits change an earlier message (see WA.edit) rather than
 	// add one.
 	case m.ReactionMessage != nil, m.ProtocolMessage != nil, m.SenderKeyDistributionMessage != nil,
 		m.PollUpdateMessage != nil, m.DeviceSentMessage != nil, m.AlbumMessage != nil,
-		m.SecretEncryptedMessage != nil, hdCopy(m):
+		m.SecretEncryptedMessage != nil, secondCopy(m):
 		e.Skip = true
 	default:
 		e.Text = unsupportedText
