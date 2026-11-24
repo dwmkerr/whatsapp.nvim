@@ -75,7 +75,8 @@ Chat list (left):
 | `<CR>` `l` | Open chat |
 | `i` | Open chat and start composing |
 | `u` | Jump to next unread chat |
-| `f` | Cycle the filter: all / unread / groups / archived |
+| `f` | Cycle the filter: all / unread / groups |
+| `<CR>` on Archived | Open archived chats; `q` or `<BS>` goes back |
 | `gU` `gu` `~` | Mark unread / read / toggle, mirrored to your phone |
 | `gx` `]m` `[m` | Open / next / previous media in the open chat |
 | `K` `L` | Older messages / toggle layout in the open chat |
