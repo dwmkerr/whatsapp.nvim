@@ -25,6 +25,7 @@ local M = {
   typing = nil,      -- { jid, sender, who, media } while the other party types in the open chat
   available = false, -- bridge asked to show this device online
   out_of_sync = {},  -- app state collections waiting on the phone's copy, name -> true
+  stale = {},        -- panes ("chat", "list") and data ("chats") skipped while the tab was hidden
 }
 
 -- Percent done while the bridge replays missed messages or loads history,
@@ -106,6 +107,13 @@ end
 
 function M.layout_valid()
   return M.tab and vim.api.nvim_tabpage_is_valid(M.tab)
+end
+
+-- Whether the WhatsApp tab is the one on screen. Renders and list
+-- refreshes wait for it: nobody sees a hidden tab, and bridge events keep
+-- coming while it is closed or behind another tab.
+function M.visible()
+  return M.layout_valid() and vim.api.nvim_get_current_tabpage() == M.tab
 end
 
 function M.win_valid(name)
