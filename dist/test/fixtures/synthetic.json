@@ -28,7 +28,7 @@
     },
     {
       "type": "history",
-      "note": "First history chunk after pairing: everyday chats with unread counts from the phone. #34: in Boulder Wednesdays, my reply to a document (no text to quote) and a reply to a message older than the stored history (only the copy in the reply). #43: a photo or video sent in HD arrives twice, the phone shows it once. #44: a poll in the newest format. #46: Cleo adds Hana and a stranger and shares recent history with them. The notice has no text, only who it went to and when the history starts; the phone names the stranger by number. Elin is a saved contact, but her conversation arrives named by her number; the chat must still show her contact name. #59: Iris is a saved contact whose conversation arrives named by her number with the middle digits hidden, as the phone sends for some contacts; the chat must still show her contact name.",
+      "note": "First history chunk after pairing: everyday chats with unread counts from the phone. #34: in Boulder Wednesdays, my reply to a document (no text to quote) and a reply to a message older than the stored history (only the copy in the reply). #43: a photo or video sent in HD arrives twice, the phone shows it once. #44: a poll in the newest format. #46: Cleo adds Hana and a stranger and shares recent history with them. The notice has no text, only who it went to and when the history starts; the phone names the stranger by number. Elin is a saved contact, but her conversation arrives named by her number; the chat must still show her contact name. #59: Iris is a saved contact whose conversation arrives named by her number with the middle digits hidden, as the phone sends for some contacts; the chat must still show her contact name. #63: in Harbour Swimmers, Hana shares a link long enough to wrap inside its bubble.",
       "progress": 35,
       "delay_ms": 600,
       "conversations": [
@@ -125,7 +125,8 @@
         {
           "jid": "120363400000000006@g.us",
           "messages": [
-            { "id": "HS01", "from": "447700900107@s.whatsapp.net", "text": "Water's 11 degrees, still going in", "at": "-6h" }
+            { "id": "HS01", "from": "447700900107@s.whatsapp.net", "text": "Water's 11 degrees, still going in", "at": "-6h" },
+            { "id": "HS02", "from": "447700900108@s.whatsapp.net", "text": "Tide times for the weekend: https://tides.example.com/harbour/north-beach/forecast?from=saturday&days=2&units=metric. Low tide is the best time to go in.", "at": "-5h50m" }
           ]
         },
         {
