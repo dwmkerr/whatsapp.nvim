@@ -32,6 +32,21 @@ return function()
   check(counted[1]:match(" 3 $") ~= nil and vim.fn.strdisplaywidth(counted[1]) == 20, "chat_list shows the count left of the time")
   check(counted[2] == lines[2], "chat_list leaves read chats unchanged with counts on")
 
+  local urls = format.urls("see https://example.com/a. and (https://en.wikipedia.org/wiki/Foo_(bar)), or http://x.io/p?q=1!")
+  check(#urls == 3 and urls[1] == "https://example.com/a" and urls[2] == "https://en.wikipedia.org/wiki/Foo_(bar)"
+    and urls[3] == "http://x.io/p?q=1", "urls drop sentence punctuation and unopened brackets: " .. vim.inspect(urls))
+  check(#format.urls("no links, just https:// on its own") == 0, "a bare scheme is not a link")
+  local long = "https://example.com/" .. string.rep("abcdefghij", 8) .. "/end"
+  local lmsg = { id = "L1", text = "read this " .. long .. " later", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" }
+  local blines, bowners = format.bubbles({ lmsg }, false, 40)
+  local pieces = format.link_spans(blines, bowners)
+  local joined = {}
+  for _, p in ipairs(pieces) do
+    joined[#joined + 1] = blines[p[1] + 1]:sub(p[2] + 1, p[3])
+  end
+  check(#pieces > 1 and table.concat(joined) == long, "a wrapped link is found piece by piece: " .. vim.inspect(joined))
+  check(vim.iter(pieces):all(function(p) return p[4] == long end), "every piece of a wrapped link carries the whole URL")
+
   local clines, owners, spans = format.conversation({
     { id = "1", text = "hi\nthere", ts = 1760390000, from_me = false, sender_name = "Alice", sender = "x" },
     { id = "2", text = "", ts = 1760390060, from_me = true, sender_name = "me", media_type = "image", filename = "image.jpg" },
@@ -372,6 +387,33 @@ return function()
     return vim.trim(table.concat(parts)), marks[1][2] + 1
   end
   local msgs = S.messages["111@s.whatsapp.net"]
+  local link = "https://example.com/" .. string.rep("abcdefghij", 12) .. "/end"
+  table.insert(msgs, { id = "u1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
+    sender_name = "Alice", text = "look " .. link, ts = 1760400250, from_me = false })
+  -- Bubbles wrap a long link inside the box; the lines layout leaves it to
+  -- the window.
+  S.opts.layout = "bubbles"
+  chat.render()
+  local link_marks = vim.tbl_filter(function(mk) return mk[4].url ~= nil end,
+    vim.api.nvim_buf_get_extmarks(S.bufs.chat, vim.api.nvim_create_namespace("whatsapp_chat"), 0, -1, { details = true }))
+  check(#link_marks > 1 and vim.iter(link_marks):all(function(mk) return mk[4].url == link end),
+    "a wrapped link becomes terminal hyperlinks carrying the whole URL: " .. #link_marks)
+  check(link_marks[1] and link_marks[1][4].hl_group == "WhatsAppLink", "links are underlined")
+  local opened
+  local real_open = vim.ui.open
+  vim.ui.open = function(u) opened = u end
+  vim.api.nvim_set_current_win(S.wins.chat)
+  vim.api.nvim_win_set_cursor(S.wins.chat, { link_marks[#link_marks][2] + 1, 0 })
+  vim.api.nvim_feedkeys("gx", "x", false)
+  check(opened == link, "gx on the last piece of a wrapped link opens the whole URL: " .. tostring(opened))
+  opened = nil
+  vim.api.nvim_set_current_win(S.wins.list)
+  vim.api.nvim_feedkeys("gx", "x", false)
+  check(opened == nil, "gx from the list still means media, not links")
+  vim.ui.open = real_open
+  table.remove(msgs)
+  S.opts.layout = "lines"
+  chat.render()
   check(hint() == nil, "no hint without media")
   table.insert(msgs, { id = "v1", chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net",
     sender_name = "Alice", text = "", ts = 1760400300, from_me = false, media_type = "voice", filename = "audio.ogg", seconds = 3 })

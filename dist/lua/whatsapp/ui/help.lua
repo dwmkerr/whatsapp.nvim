@@ -30,7 +30,7 @@ local keys = {
     { "R", "reply to message under cursor" },
     { "r", "react to message under cursor" },
     { "<CR>", "media menu: download, open, copy path" },
-    { "gx", "open media (downloads first, asks before opening)" },
+    { "gx", "open link under cursor, else media (asks first)" },
     { "]m [m", "next / previous media" },
     { "K", "load older messages" },
     { "gU gu ~", "mark unread (closes chat) / read / toggle" },

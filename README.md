@@ -62,6 +62,8 @@ Keys that act on the conversation also work from the chat list, so a shortcut ne
 
 Attachments show as a tag in the message: `[image photo.jpg ⇣]`, `[video clip.mp4 0:12 ⇣]`, and voice notes as duration plus waveform. `⇣` means not downloaded yet, `✓` means the file is in the local cache. `<CR>` opens a small menu (download, open, copy path), `gx` downloads if needed and opens in the default application, and `[m` / `]m` move between attachments. The target attachment carries a hint with these keys under it.
 
+Links in messages are underlined and open whole even when they wrap: Cmd+click in iTerm, Ctrl+Shift+click in kitty, or `gx` with the cursor on one. Clicking works over SSH too; inside tmux it needs tmux 3.4+ with `set -as terminal-features ",*:hyperlinks"`.
+
 ![Voice note, image and typing bubble](./docs/media.png)
 
 Please be careful. If someone has sent something malicious then in the worst case opening it could lead to code execution. There are some best-effort protections[^1] but be mindful: every open asks for confirmation.
@@ -138,6 +140,8 @@ The dataset grows with each bug found on a real account. It covers these edge ca
 | A poll in the newest format | Boulder Wednesdays | [#44](https://github.com/dwmkerr/whatsapp.nvim/issues/44) |
 | Recent history shared with new group members, a notice with no text | Boulder Wednesdays | [#46](https://github.com/dwmkerr/whatsapp.nvim/issues/46) |
 | A saved contact whose history arrives named by their number | Elin | |
+| A saved contact whose history arrives named by their number with the middle digits hidden | Iris | [#59](https://github.com/dwmkerr/whatsapp.nvim/issues/59) |
+| A link long enough to wrap inside its bubble | Harbour Swimmers | [#63](https://github.com/dwmkerr/whatsapp.nvim/issues/63) |
 
 I have found that when working live in WhatsApp, the best flow is:
 

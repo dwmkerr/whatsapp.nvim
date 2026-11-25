@@ -336,4 +336,81 @@ function M.conversation(messages, is_group)
   return lines, owners, spans
 end
 
+-- Web links in message text. Punctuation that ends the sentence stays out,
+-- as the phone does, and so does a closing bracket the link never opened.
+function M.urls(text)
+  local out = {}
+  for u in (text or ""):gmatch("https?://[^%s<>\"]+") do
+    while true do
+      local last = u:sub(-1)
+      local _, opens = u:gsub("%(", "")
+      local _, closes = u:gsub("%)", "")
+      if last:match("[%.,;:!?'\"]") or (last == ")" and closes > opens) then
+        u = u:sub(1, -2)
+      else
+        break
+      end
+    end
+    if #u > #"https://" then
+      out[#out + 1] = u
+    end
+  end
+  return out
+end
+
+-- Where each link sits in the rendered lines, as { row, start, end, url }
+-- with 0-based rows and byte columns. Wrapping cuts a long link into pieces
+-- on consecutive rows; every piece carries the whole URL, so any of them
+-- opens it.
+function M.link_spans(lines, owners)
+  local rows_of, order = {}, {}
+  for i, m in pairs(owners) do
+    if not rows_of[m] then
+      rows_of[m] = {}
+      order[#order + 1] = m
+    end
+    table.insert(rows_of[m], i)
+  end
+  local out = {}
+  for _, m in ipairs(order) do
+    local rows = rows_of[m]
+    table.sort(rows)
+    local idx, col = 1, 1
+    for _, u in ipairs(M.urls(m.text)) do
+      local pos, prev = 1, nil
+      local from_idx, from_col = idx, col
+      while idx <= #rows and pos <= #u do
+        local r = rows[idx]
+        local line = lines[r] or ""
+        -- A piece after the first can only be the start of the next row.
+        if prev and r ~= prev + 1 then
+          break
+        end
+        local want = u:sub(pos, pos + math.min(#u - pos, prev and 7 or 11))
+        local s = line:find(want, prev and 1 or col, true)
+        if s then
+          local k = 0
+          while pos + k <= #u and line:byte(s + k) == u:byte(pos + k) do
+            k = k + 1
+          end
+          out[#out + 1] = { r - 1, s - 1, s - 1 + k, u }
+          pos, prev, col = pos + k, r, s + k
+          if pos > #u then
+            break
+          end
+        elseif prev then
+          break
+        end
+        idx, col = idx + 1, 1
+      end
+      -- Not drawn (cut from a quote, say): the next link starts where this
+      -- one would have.
+      if not prev then
+        idx, col = from_idx, from_col
+      end
+    end
+  end
+  return out
+end
+
 return M

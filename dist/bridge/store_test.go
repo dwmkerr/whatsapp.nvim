@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -75,11 +76,18 @@ func TestRenameChatFixesHistory(t *testing.T) {
 	must(t, s.UpsertChat("448@s.whatsapp.net", "Named", false, 10))
 	// Stored by bridges before numberName; picked up again so they recover.
 	must(t, s.UpsertChat("449@s.whatsapp.net", "+449", false, 10))
+	// The phone sends some names as the number with the middle hidden.
+	must(t, s.UpsertChat("44700@s.whatsapp.net", "+44∙∙00", false, 10))
 	_, _ = s.InsertMessage(Message{ID: "1", ChatJID: "447@s.whatsapp.net", Sender: "447@s.whatsapp.net", SenderName: "447", Text: "x", TS: 10})
 	unnamed, err := s.UnnamedChats()
 	must(t, err)
-	if len(unnamed) != 2 || unnamed[0].JID == "448@s.whatsapp.net" || unnamed[1].JID == "448@s.whatsapp.net" {
+	if len(unnamed) != 3 {
 		t.Fatalf("got %+v", unnamed)
+	}
+	for _, c := range unnamed {
+		if c.JID == "448@s.whatsapp.net" {
+			t.Fatalf("a named chat is not retried: %+v", unnamed)
+		}
 	}
 	must(t, s.RenameChat("447@s.whatsapp.net", "Alice"))
 	msgs, _ := s.ListMessages("447@s.whatsapp.net", 10, 0)
@@ -230,19 +238,27 @@ func TestOlderStoresAskForTheArchiveOnce(t *testing.T) {
 	if err := s.UpsertChat("9@g.us", "Improvers", true, 100); err != nil {
 		t.Fatal(err)
 	}
-	// A store filled by a bridge that dropped early archive flags.
-	if _, err := s.db.Exec(`PRAGMA user_version = 0`); err != nil {
-		t.Fatal(err)
-	}
 	s.Close()
-	for i, want := range []bool{true, false} {
+	// 0: a bridge that dropped early archive flags. 1: one that ran the
+	// repair, but whatsmeow kept the archive snapshot from it.
+	for _, version := range []int{0, 1} {
 		s, err = OpenStore(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if s.ArchiveUnknown != want {
-			t.Errorf("open %d: ArchiveUnknown = %v, want %v", i+1, s.ArchiveUnknown, want)
+		if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, version)); err != nil {
+			t.Fatal(err)
 		}
 		s.Close()
+		for i, want := range []bool{true, false} {
+			s, err = OpenStore(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.ArchiveUnknown != want {
+				t.Errorf("version %d, open %d: ArchiveUnknown = %v, want %v", version, i+1, s.ArchiveUnknown, want)
+			}
+			s.Close()
+		}
 	}
 }

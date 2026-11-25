@@ -47,6 +47,7 @@ local function define_highlights()
   -- Underlined like a link: the tag responds to keys.
   local special = vim.api.nvim_get_hl(0, { name = "Special", link = false })
   hl("WhatsAppMedia", { fg = special.fg, underline = true })
+  hl("WhatsAppLink", { link = "Underlined" })
   hl("WhatsAppSeparator", { link = "Comment" })
   hl("WhatsAppQuote", { link = "Comment" })
   hl("WhatsAppBubble", { link = "Normal" })

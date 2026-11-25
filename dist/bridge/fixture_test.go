@@ -55,8 +55,8 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	w, out := replayFixture(t, syntheticFixture)
 	by := chatsByName(t, w)
 
-	if len(by) != 13 {
-		t.Fatalf("want 13 chats, got %d: %v", len(by), by)
+	if len(by) != 14 {
+		t.Fatalf("want 14 chats, got %d: %v", len(by), by)
 	}
 	if c := by["Boulder Wednesdays"]; !c.IsGroup || c.Unread != 4 {
 		t.Errorf("group keeps its name and counts the offline message: %+v", c)
@@ -72,6 +72,9 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	}
 	if _, ok := by["Elin Ward"]; !ok {
 		t.Errorf("a saved contact whose history arrives named by number keeps the contact name: %+v", by)
+	}
+	if _, ok := by["Iris Novak"]; !ok {
+		t.Errorf("a saved contact whose history arrives named by a masked number keeps the contact name: %+v", by)
 	}
 
 	msgs, err := w.store.ListMessages(by["Ada Fenwick"].JID, 10, 0)

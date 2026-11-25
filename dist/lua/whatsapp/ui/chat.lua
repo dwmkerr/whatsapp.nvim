@@ -22,6 +22,7 @@ local function typing_rows(width)
 end
 local line_owner = {}
 local media_rows = {} -- { { row = 1-based tag row, m = message }, ... } in chat order
+local link_rows = {} -- 1-based row -> { { start, end, url }, ... }, byte columns
 local rendered_jid = nil -- chat shown by the previous render, for scroll follow
 
 function M.ensure_buf()
@@ -53,7 +54,14 @@ function M.ensure_buf()
       wa.media_menu(M.media_target())
     end
   end, "Media menu, or close the picture")
-  map("gx", function() wa.open_media(M.media_target()) end, "Open media")
+  map("gx", function()
+    local url = M.link_target()
+    if url then
+      vim.ui.open(url)
+    else
+      wa.open_media(M.media_target())
+    end
+  end, "Open the link under the cursor, else media")
   map("]m", function() wa.next_media(1) end, "Next media")
   map("[m", function() wa.next_media(-1) end, "Previous media")
   map("K", wa.load_older, "Load older messages")
@@ -107,6 +115,31 @@ function M.media_target()
   end
   local last = media_rows[#media_rows]
   return last.m, last.row
+end
+
+-- The link gx opens: the one under the cursor, else the first on the
+-- cursor's row, else the first in the message under the cursor when that
+-- message has no attachment for gx to open instead.
+function M.link_target()
+  if not S.win_valid("chat") then
+    return nil
+  end
+  local pos = vim.api.nvim_win_get_cursor(S.wins.chat)
+  local row, col = pos[1], pos[2]
+  local on_row = link_rows[row] or {}
+  for _, l in ipairs(on_row) do
+    if col >= l[1] and col < l[2] then
+      return l[3]
+    end
+  end
+  if on_row[1] then
+    return on_row[1][3]
+  end
+  local m = line_owner[row]
+  if m and (m.media_type or "") == "" then
+    return format.urls(m.text)[1]
+  end
+  return nil
 end
 
 -- ]m / [m: move the cursor to the next or previous attachment, counting
@@ -427,6 +460,15 @@ function M.render(opts)
     else
       vim.api.nvim_buf_set_extmark(buf, ns, line, cs, { end_col = math.min(ce, #lines[line + 1]), hl_group = group })
     end
+  end
+  -- Links become terminal hyperlinks (OSC 8). The terminal cannot rebuild a
+  -- URL that wrapping cut across rows, so every piece carries the whole one.
+  link_rows = {}
+  for _, l in ipairs(format.link_spans(lines, owners)) do
+    vim.api.nvim_buf_set_extmark(buf, ns, l[1], l[2], { end_col = l[3], url = l[4], hl_group = "WhatsAppLink" })
+    local row = link_rows[l[1] + 1] or {}
+    row[#row + 1] = { l[2], l[3], l[4] }
+    link_rows[l[1] + 1] = row
   end
 
   if S.win_valid("chat") then

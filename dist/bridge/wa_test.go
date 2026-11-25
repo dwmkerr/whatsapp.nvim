@@ -53,3 +53,21 @@ func TestOfflineProgressReportsEachPercentOnce(t *testing.T) {
 		t.Fatalf("want 1..100 once each, got %d values %v..", len(got), got[:3])
 	}
 }
+
+func TestNumberNameSeesThroughMaskedNumbers(t *testing.T) {
+	user := "447700900109"
+	for name, want := range map[string]bool{
+		"447700900109":    true,
+		"+447700900109":   true,
+		"+44∙∙∙∙∙∙∙∙09":   true,
+		"+4477∙∙∙∙∙109":   true,
+		"+44∙∙∙∙∙∙∙∙08":   false, // someone else's number
+		"+44∙∙∙∙∙∙∙09":    false, // one digit short
+		"Iris Novak":      false,
+		"+44 7700 900109": false,
+	} {
+		if got := numberName(name, user); got != want {
+			t.Errorf("numberName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
