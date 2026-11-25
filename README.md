@@ -62,6 +62,8 @@ Keys that act on the conversation also work from the chat list, so a shortcut ne
 
 Attachments show as a tag in the message: `[image photo.jpg ⇣]`, `[video clip.mp4 0:12 ⇣]`, and voice notes as duration plus waveform. `⇣` means not downloaded yet, `✓` means the file is in the local cache. `<CR>` opens a small menu (download, open, copy path), `gx` downloads if needed and opens in the default application, and `[m` / `]m` move between attachments. The target attachment carries a hint with these keys under it.
 
+Links in messages are underlined and open whole even when they wrap: Cmd+click in iTerm, Ctrl+Shift+click in kitty, or `gx` with the cursor on one. Clicking works over SSH too; inside tmux it needs tmux 3.4+ with `set -as terminal-features ",*:hyperlinks"`.
+
 ![Voice note, image and typing bubble](./docs/media.png)
 
 Please be careful. If someone has sent something malicious then in the worst case opening it could lead to code execution. There are some best-effort protections[^1] but be mindful: every open asks for confirmation.

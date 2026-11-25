@@ -94,7 +94,7 @@ Conversation (right):
 | `R` | Reply to the message under the cursor |
 | `r` | React to the message under the cursor |
 | `<CR>` | Media menu: download, open, copy path |
-| `gx` | Download if needed, then confirm before opening in its default application |
+| `gx` | Open the link under the cursor in the browser; otherwise download the media if needed, then confirm before opening it in its default application |
 | `]m` `[m` | Next / previous media |
 | `K` | Load older messages |
 | `gU` `gu` `~` | Mark chat unread (closes it) / read / toggle |
@@ -120,7 +120,7 @@ Multi-line messages work: write several lines, then `:w`.
 
 Each chat keeps its own draft and reply target in memory until Neovim exits. Switching chats or closing the WhatsApp tab preserves unsent drafts. A send response only clears the original draft if it has not been edited while sending.
 
-Media shows as a tag in the message: `[image photo.jpg]`, `[video clip.mp4 0:12]`, and voice notes as duration plus waveform, `[voice 0:42 ▁▃▇▂▅▁▇▃▂▁▅▂]`. `⇣` means not downloaded yet, `✓` means the file is in the cache. `<CR>` and `gx` act on the media under the cursor, or on the newest media in the chat when the cursor is elsewhere; that target carries a key hint on a line under it, and `]m` `[m` move between attachments. The compose pane counts as the slot after the last attachment: `]m` past the end returns to compose, `[m` from compose lands on the newest attachment.
+Media shows as a tag in the message: `[image photo.jpg]`, `[video clip.mp4 0:12]`, and voice notes as duration plus waveform, `[voice 0:42 ▁▃▇▂▅▁▇▃▂▁▅▂]`. `⇣` means not downloaded yet, `✓` means the file is in the cache. Links are underlined and open as terminal hyperlinks, whole even when wrapped; `gx` opens the link under the cursor and otherwise acts on media. `<CR>` and `gx` act on the media under the cursor, or on the newest media in the chat when the cursor is elsewhere; that target carries a key hint on a line under it, and `]m` `[m` move between attachments. The compose pane counts as the slot after the last attachment: `]m` past the end returns to compose, `[m` from compose lands on the newest attachment.
 
 Attachments download without opening an application. Use `gx` to open one, with confirmation for every file type. Downloads stream to a temporary file and are checked before entering the cache. Each attachment is limited to 25 MiB and 60 seconds, with at most two downloads at once. Larger attachments can be opened in the official WhatsApp client.
 
