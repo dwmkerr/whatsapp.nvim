@@ -292,6 +292,10 @@ func (w *WA) handleEvent(evt interface{}) {
 		chat := w.canonical(context.Background(), v.JID, types.EmptyJID).String()
 		_ = w.store.SetArchived(chat, v.Action.GetArchived())
 		w.out.Emit("chats.changed", nil)
+	case *events.GroupInfo:
+		w.handleGroupInfo(context.Background(), v)
+	case *events.JoinedGroup:
+		w.handleJoinedGroup(context.Background(), v)
 	case *events.Contact:
 		jid := v.JID.ToNonAD().String()
 		name := v.Action.GetFullName()
@@ -313,6 +317,55 @@ func (w *WA) handleEvent(evt interface{}) {
 			}
 		}
 	}
+}
+
+// handleGroupInfo applies a change someone made to a group while we are
+// connected. Without it a rename only showed after reconnecting, and only
+// for a group that had no name yet, since RefreshNames skips named chats.
+func (w *WA) handleGroupInfo(ctx context.Context, v *events.GroupInfo) {
+	jid := v.JID.ToNonAD().String()
+	changed := false
+	if v.Name != nil {
+		if v.Name.Name != "" {
+			w.names.Store(jid, v.Name.Name)
+			changed = w.store.RenameChat(jid, v.Name.Name) == nil
+		} else {
+			// A removed subject leaves the group named after its members,
+			// which the refetch below fills in.
+			w.names.Delete(jid)
+			changed = w.store.ClearChatName(jid) == nil
+		}
+	}
+	// Membership only shows in the name of a group without a subject, so
+	// only those cost a request. A removed subject needs one too.
+	subjectless := w.store.ChatName(jid) == "" || w.store.ChatName(jid) == groupPlaceholder(v.JID.User)
+	if subjectless && (v.Name != nil || len(v.Join) > 0 || len(v.Leave) > 0) {
+		if g, err := w.groupInfo(ctx, v.JID); err != nil {
+			w.log.Warnf("group %s changed but its info failed: %v", jid, err)
+		} else if g.Name != "" {
+			// We had no subject stored for it, but it has one.
+			w.names.Store(jid, g.Name)
+			changed = w.store.RenameChat(jid, g.Name) == nil
+		} else if fresh, _ := w.store.SetMembersName(jid, w.membersName(ctx, g.Members)); fresh {
+			changed = true
+		}
+	}
+	if changed {
+		w.out.Emit("chats.changed", nil)
+	}
+}
+
+// handleJoinedGroup names a group we were just added to, so its first
+// message never waits on a group info request that can fail.
+func (w *WA) handleJoinedGroup(ctx context.Context, v *events.JoinedGroup) {
+	jid := v.JID.ToNonAD().String()
+	if v.Name != "" {
+		w.names.Store(jid, v.Name)
+		_ = w.store.RenameChat(jid, v.Name)
+	} else {
+		_, _ = w.store.SetMembersName(jid, w.membersName(ctx, v.Participants))
+	}
+	w.out.Emit("chats.changed", nil)
 }
 
 // numberName reports whether name is only user's phone number, in full or
