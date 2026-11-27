@@ -55,8 +55,8 @@ func TestSyntheticFixtureReplaysThroughTheBridge(t *testing.T) {
 	w, out := replayFixture(t, syntheticFixture)
 	by := chatsByName(t, w)
 
-	if len(by) != 14 {
-		t.Fatalf("want 14 chats, got %d: %v", len(by), by)
+	if len(by) != 15 {
+		t.Fatalf("want 15 chats, got %d: %v", len(by), by)
 	}
 	if c := by["Boulder Wednesdays"]; !c.IsGroup || c.Unread != 4 {
 		t.Errorf("group keeps its name and counts the offline message: %+v", c)
@@ -163,7 +163,8 @@ func TestGroupNamedOnceTheServerAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Name != "Ridge Walkers" {
+	// Renamed later in the timeline (#41).
+	if c.Name != "Ridge & Fell Walkers" {
 		t.Errorf("a group whose first lookup failed is named after the next sync: %+v", c)
 	}
 }
@@ -186,7 +187,8 @@ func TestGroupWithoutSubjectNamedAfterItsMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Name != "Ada, Bram & Gus" {
+	// Hana joins later in the timeline (#41).
+	if c.Name != "Ada, Bram, Gus & Hana" {
 		t.Errorf("a group without a subject shows the other members' first names, as the phone does: %+v", c)
 	}
 	if n := w.store.ChatName(jid); n != "" {
@@ -412,4 +414,47 @@ func TestHistoryNoticeSaysWhatWasShared(t *testing.T) {
 	if got := extract(&waE2E.Message{MessageHistoryNotice: &waE2E.MessageHistoryNotice{}}).Text; got != "[history] sent new members message history" {
 		t.Errorf("a notice with nothing in it still reads: %q", got)
 	}
+}
+
+func TestGroupChangesShowStraightAway(t *testing.T) {
+	w, _ := replayFixture(t, syntheticFixture)
+	by := chatsByName(t, w)
+	if _, ok := by["Ridge & Fell Walkers"]; !ok {
+		t.Errorf("a group renamed while connected shows its new subject: %v", names(by))
+	}
+	if _, ok := by["Ridge Walkers"]; ok {
+		t.Errorf("a renamed group keeps its old subject")
+	}
+	if _, ok := by["Ada, Bram, Gus & Hana"]; !ok {
+		t.Errorf("a group without a subject follows a member joining: %v", names(by))
+	}
+	if c := by["Quiz Night"]; c.Unread != 1 {
+		t.Errorf("a group we were added to is named before its first message: %v", names(by))
+	}
+
+	// Gus leaves, then someone removes Ridge & Fell Walkers' subject.
+	gus, _ := types.ParseJID("447700900107@s.whatsapp.net")
+	unnamed, _ := types.ParseJID("120363400000000007@g.us")
+	w.fixtureServerSees(&events.GroupInfo{JID: unnamed, Leave: []types.JID{gus}})
+	w.handleEvent(&events.GroupInfo{JID: unnamed, Leave: []types.JID{gus}})
+	ridge, _ := types.ParseJID("120363400000000005@g.us")
+	w.groupInfos.Store(ridge.String(), groupMeta{Members: []types.GroupParticipant{
+		{JID: gus, PhoneNumber: gus}, {JID: w.cli.Store.ID.ToNonAD(), PhoneNumber: w.cli.Store.ID.ToNonAD()},
+	}})
+	w.handleEvent(&events.GroupInfo{JID: ridge, Name: &types.GroupName{}})
+	by = chatsByName(t, w)
+	if _, ok := by["Ada, Bram & Hana"]; !ok {
+		t.Errorf("a group without a subject follows a member leaving: %v", names(by))
+	}
+	if c, ok := by["Gus"]; !ok || c.JID != ridge.String() {
+		t.Errorf("a group whose subject was removed is named after its members: %v", names(by))
+	}
+}
+
+func names(by map[string]Chat) []string {
+	out := make([]string, 0, len(by))
+	for n := range by {
+		out = append(out, n)
+	}
+	return out
 }

@@ -208,6 +208,13 @@ func (s *Store) RenameChat(jid, name string) error {
 	return err
 }
 
+// ClearChatName forgets a group's subject after it was removed, so the
+// group shows its members' names again.
+func (s *Store) ClearChatName(jid string) error {
+	_, err := s.db.Exec(`UPDATE chats SET name = '' WHERE jid = ?`, jid)
+	return err
+}
+
 // SetMembersName records the name built from a group's members, and reports
 // whether it changed. It can arrive before the group's first message.
 func (s *Store) SetMembersName(jid, name string) (bool, error) {

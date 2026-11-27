@@ -229,6 +229,37 @@
       "chat": "447700900103@s.whatsapp.net",
       "archived": true,
       "delay_ms": 1500
+    },
+    {
+      "type": "group_change",
+      "note": "#41: Ada renames Ridge Walkers while the plugin is open. The list should show the new subject straight away, not after the next reconnect.",
+      "chat": "120363400000000005@g.us",
+      "from": "447700900101@s.whatsapp.net",
+      "subject": "Ridge & Fell Walkers",
+      "delay_ms": 1500
+    },
+    {
+      "type": "group_change",
+      "note": "#41: Gus adds Hana to the group without a subject. Its name follows the members, so it should become \"Ada, Bram, Gus & Hana\".",
+      "chat": "120363400000000007@g.us",
+      "from": "447700900107@s.whatsapp.net",
+      "join": ["447700900108@s.whatsapp.net"],
+      "delay_ms": 1500
+    },
+    {
+      "type": "joined_group",
+      "note": "#41: Cleo adds me to a new group, then says hello. The first message should arrive under the group's name, not a placeholder.",
+      "chat": "120363400000000008@g.us",
+      "from": "447700900103@s.whatsapp.net",
+      "name": "Quiz Night",
+      "members": ["447700900103@s.whatsapp.net", "me", "447700900104@s.whatsapp.net", "447700900108@s.whatsapp.net"],
+      "delay_ms": 1500
+    },
+    {
+      "type": "message",
+      "chat": "120363400000000008@g.us", "id": "QN01", "from": "447700900103@s.whatsapp.net",
+      "text": "Welcome! Thursday at 8, the Lamb",
+      "delay_ms": 400
     }
   ]
 }

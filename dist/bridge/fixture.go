@@ -57,6 +57,9 @@ type fixtureName struct {
 //	                 a group without a subject has members and no name.
 //	                 joined_only: only the joined-groups list names it, the
 //	                 per-group request keeps failing
+//	group_change     chat, from, subject, join, leave: someone changed a group
+//	                 we are in. subject is the new one, "" when removed.
+//	joined_group     chat, from, name, members: we were added to a new group
 type fixtureEvent struct {
 	Type    string `json:"type"`
 	Note    string `json:"note,omitempty"`     // why the event is in the dataset, e.g. the issue it reproduces
@@ -75,7 +78,12 @@ type fixtureEvent struct {
 	Name       string   `json:"name,omitempty"`
 	Members    []string `json:"members,omitempty"`
 	JoinedOnly bool     `json:"joined_only,omitempty"`
-	Messages   int      `json:"messages,omitempty"`
+	// Subject is a pointer because removing a group's subject sends an
+	// empty one, which must not read as "unchanged".
+	Subject  *string  `json:"subject,omitempty"`
+	Join     []string `json:"join,omitempty"`
+	Leave    []string `json:"leave,omitempty"`
+	Messages int      `json:"messages,omitempty"`
 }
 
 type fixtureConv struct {
@@ -297,6 +305,23 @@ func (fx *fixture) checkMsg(chat types.JID, m fixtureMsg, id string) error {
 	return nil
 }
 
+// members resolves participant JIDs, with "me" for us.
+func (fx *fixture) members(list []string) ([]types.JID, error) {
+	out := make([]types.JID, 0, len(list))
+	for _, m := range list {
+		if m == "me" {
+			out = append(out, fx.meJID())
+			continue
+		}
+		j, err := parseFixtureJID(m)
+		if err != nil {
+			return nil, fmt.Errorf("member %q: %w", m, err)
+		}
+		out = append(out, j)
+	}
+	return out, nil
+}
+
 // sender resolves "from" to whether the message is ours and who sent it.
 func (fx *fixture) sender(chat types.JID, from string) (types.JID, bool, error) {
 	switch from {
@@ -455,19 +480,65 @@ func (fx *fixture) build(e fixtureEvent, n int) (interface{}, error) {
 		if chat.Server != types.GroupServer || (e.Name == "" && len(e.Members) == 0) {
 			return nil, fmt.Errorf("group_info needs a group chat and a name or members")
 		}
-		members := make([]types.JID, 0, len(e.Members))
-		for _, m := range e.Members {
-			if m == "me" {
-				members = append(members, fx.meJID())
-				continue
-			}
-			j, err := parseFixtureJID(m)
-			if err != nil {
-				return nil, fmt.Errorf("member %q: %w", m, err)
-			}
-			members = append(members, j)
+		members, err := fx.members(e.Members)
+		if err != nil {
+			return nil, err
 		}
 		return &fixtureGroupInfo{JID: chat, Name: e.Name, Members: members, JoinedOnly: e.JoinedOnly}, nil
+	case "group_change":
+		chat, err := parseFixtureJID(e.Chat)
+		if err != nil {
+			return nil, err
+		}
+		if chat.Server != types.GroupServer || (e.Subject == nil && len(e.Join) == 0 && len(e.Leave) == 0) {
+			return nil, fmt.Errorf("group_change needs a group chat and a subject, join or leave")
+		}
+		ts, err := fx.at(e.At)
+		if err != nil {
+			return nil, err
+		}
+		gi := &events.GroupInfo{JID: chat, Timestamp: ts}
+		if e.From != "" {
+			sender, _, err := fx.sender(chat, e.From)
+			if err != nil {
+				return nil, err
+			}
+			gi.Sender = &sender
+		}
+		if e.Subject != nil {
+			gi.Name = &types.GroupName{Name: *e.Subject, NameSetAt: ts}
+		}
+		if gi.Join, err = fx.members(e.Join); err != nil {
+			return nil, err
+		}
+		if gi.Leave, err = fx.members(e.Leave); err != nil {
+			return nil, err
+		}
+		return gi, nil
+	case "joined_group":
+		chat, err := parseFixtureJID(e.Chat)
+		if err != nil {
+			return nil, err
+		}
+		if chat.Server != types.GroupServer || (e.Name == "" && len(e.Members) == 0) {
+			return nil, fmt.Errorf("joined_group needs a group chat and a name or members")
+		}
+		members, err := fx.members(e.Members)
+		if err != nil {
+			return nil, err
+		}
+		jg := &events.JoinedGroup{Type: "new", GroupInfo: types.GroupInfo{JID: chat, GroupName: types.GroupName{Name: e.Name}}}
+		for _, m := range members {
+			jg.Participants = append(jg.Participants, types.GroupParticipant{JID: m, PhoneNumber: m})
+		}
+		if e.From != "" {
+			sender, _, err := fx.sender(chat, e.From)
+			if err != nil {
+				return nil, err
+			}
+			jg.Sender = &sender
+		}
+		return jg, nil
 	}
 	return nil, fmt.Errorf("unknown event type %q", e.Type)
 }
@@ -543,6 +614,7 @@ func (w *WA) replay(fx *fixture, pace float64) {
 			}
 			continue
 		}
+		w.fixtureServerSees(evt)
 		// whatsmeow keeps app state from a full sync away from event
 		// handlers unless the client asks for it. Replaying it regardless
 		// hid that the bridge never asked, so archive and unread marks from
@@ -562,4 +634,43 @@ func fullSyncAppState(evt interface{}) bool {
 		return v.FromFullSync
 	}
 	return false
+}
+
+// fixtureServerSees keeps the fixture's group info answers in step with a
+// group change, as the server's would be by the time the event arrives.
+func (w *WA) fixtureServerSees(evt interface{}) {
+	switch v := evt.(type) {
+	case *events.GroupInfo:
+		key := v.JID.String()
+		var g groupMeta
+		if old, ok := w.joinedInfos.Load(key); ok {
+			g = old.(groupMeta)
+		}
+		if v.Name != nil {
+			g.Name = v.Name.Name
+		}
+		left := map[string]bool{}
+		for _, j := range v.Leave {
+			left[j.User] = true
+		}
+		var members []types.GroupParticipant
+		for _, p := range g.Members {
+			if !left[p.JID.User] {
+				members = append(members, p)
+			}
+		}
+		for _, j := range v.Join {
+			members = append(members, types.GroupParticipant{JID: j, PhoneNumber: j})
+		}
+		g.Members = members
+		w.joinedInfos.Store(key, g)
+		// A group whose own lookup fails keeps failing after a change.
+		if _, ok := w.groupInfos.Load(key); ok {
+			w.groupInfos.Store(key, g)
+		}
+	case *events.JoinedGroup:
+		g := groupMeta{Name: v.Name, Members: v.Participants}
+		w.joinedInfos.Store(v.JID.String(), g)
+		w.groupInfos.Store(v.JID.String(), g)
+	}
 }
