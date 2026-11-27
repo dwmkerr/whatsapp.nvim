@@ -134,7 +134,7 @@ require("whatsapp").setup({
   compose_height = 3,
   page_size = 100,          -- messages per page
   notify = true,            -- vim.notify for messages in chats you are not viewing
-  mark_read_on_view = true, -- send read receipts when you open a chat
+  mark_read_on_view = true, -- read receipts for the open chat while the terminal has focus
   default_reaction = "👍",
   images = { mode = "auto" }, -- "tag" or "kitty"; auto picks kitty when the terminal supports it
 })
