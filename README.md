@@ -143,6 +143,7 @@ The dataset grows with each bug found on a real account. It covers these edge ca
 | A saved contact whose history arrives named by their number with the middle digits hidden | Iris | [#59](https://github.com/dwmkerr/whatsapp.nvim/issues/59) |
 | A link long enough to wrap inside its bubble | Harbour Swimmers | [#63](https://github.com/dwmkerr/whatsapp.nvim/issues/63) |
 | A group renamed, a member added, and a new group joined while the plugin is open | Ridge Walkers, Ada, Bram & Gus, Quiz Night | [#41](https://github.com/dwmkerr/whatsapp.nvim/issues/41) |
+| A message in the open chat while the terminal is in the background | Elin | [#25](https://github.com/dwmkerr/whatsapp.nvim/issues/25) |
 
 I have found that when working live in WhatsApp, the best flow is:
 
