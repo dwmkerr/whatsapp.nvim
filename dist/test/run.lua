@@ -544,6 +544,20 @@ return function()
   local one = images.kitty_chunks({ a = "T" }, "png")
   check(#one == 1 and one[1] == "\27_Ga=T,m=0;" .. vim.base64.encode("png") .. "\27\\", "small payload is one final chunk")
   check(images.wrap_tmux("\27_Ga=T\27\\") == "\27Ptmux;\27\27_Ga=T\27\27\\\27\\", "wrap_tmux doubles inner escapes")
+  do
+    local tried = {}
+    local got = images.enable_passthrough(function(cmd)
+      tried[#tried + 1] = cmd[#cmd]
+      return true
+    end)
+    check(got == "all" and #tried == 1, "passthrough reaches the terminal while the pane is hidden")
+    tried = {}
+    got = images.enable_passthrough(function(cmd)
+      tried[#tried + 1] = cmd[#cmd]
+      return cmd[#cmd] == "on"
+    end)
+    check(got == "on" and table.concat(tried, ",") == "all,on", "tmux without passthrough all falls back to on")
+  end
   check(images.terminal_supports_kitty({ TERM_PROGRAM = "ghostty" }) and images.terminal_supports_kitty({ KITTY_WINDOW_ID = "1" })
     and not images.terminal_supports_kitty({ TERM_PROGRAM = "iTerm.app", TERM = "xterm-256color" }), "terminal detection reads the environment")
   check(images.terminal_supports_kitty({ TERM_PROGRAM = "tmux", TERM = "xterm-256color", TMUX = "x" }, "ghostty 1.3.1 xterm-256color")

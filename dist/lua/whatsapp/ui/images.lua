@@ -248,11 +248,30 @@ end
 
 -- Terminal output -----------------------------------------------------------
 
+-- "on" only forwards while the pane is on screen, so a picture sent while
+-- the user is in another tmux window never reaches the terminal, and sent
+-- marks it done. "all" forwards it anyway; the placement is virtual, so
+-- nothing is drawn until the pane shows again. tmux before 3.4 only knows
+-- "on". run(cmd) returns whether the command succeeded.
+function M.enable_passthrough(run)
+  for _, value in ipairs({ "all", "on" }) do
+    if run({ "tmux", "set", "-p", "allow-passthrough", value }) then
+      return value
+    end
+  end
+  return nil
+end
+
+local function tmux_ok(cmd)
+  local ok = pcall(vim.fn.system, cmd)
+  return ok and vim.v.shell_error == 0
+end
+
 local function write(data)
   if vim.env.TMUX then
     if not passthrough_set then
       passthrough_set = true
-      pcall(vim.fn.system, { "tmux", "set", "-p", "allow-passthrough", "on" })
+      M.enable_passthrough(tmux_ok)
     end
     data = M.wrap_tmux(data)
   end
