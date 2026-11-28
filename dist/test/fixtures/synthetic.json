@@ -260,6 +260,13 @@
       "chat": "120363400000000008@g.us", "id": "QN01", "from": "447700900103@s.whatsapp.net",
       "text": "Welcome! Thursday at 8, the Lamb",
       "delay_ms": 400
+    },
+    {
+      "type": "message",
+      "note": "#25: arrives late, so a recording can open Elin's chat and switch away from the terminal first. The phone would not read it until WhatsApp is back on screen, so it should stay unread until the terminal has focus again.",
+      "chat": "447700900105@s.whatsapp.net", "id": "ELIN04",
+      "text": "Are you still on for Saturday?",
+      "delay_ms": 60000
     }
   ]
 }

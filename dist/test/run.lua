@@ -353,6 +353,35 @@ return function()
     return l:find("pushed live", 1, true) ~= nil
   end), "pushed message appears in open chat")
 
+  -- #25: a message in the open chat while the terminal is in the background
+  -- stays unread until focus comes back, as on the phone.
+  do
+    local client = require("whatsapp.client")
+    local real, reads = client.request, 0
+    client.request = function(method, params, cb)
+      if method == "chat.read" then
+        reads = reads + 1
+      end
+      return real(method, params, cb)
+    end
+    local function push(id)
+      client.dispatch(vim.json.encode({ event = "message", data = { chat_name = "Alice", message = {
+        id = id, chat_jid = "111@s.whatsapp.net", sender = "111@s.whatsapp.net", sender_name = "Alice",
+        text = "while away " .. id, ts = 1760400150, from_me = false } } }))
+    end
+    push("away0")
+    check(reads == 1, "a message in the open chat is read while the terminal has focus")
+    vim.api.nvim_exec_autocmds("FocusLost", {})
+    push("away1")
+    check(reads == 1, "a message in the open chat is not read while the terminal is in the background")
+    vim.api.nvim_exec_autocmds("FocusGained", {})
+    check(reads == 2, "it is read once the terminal has focus again")
+    vim.api.nvim_exec_autocmds("FocusLost", {})
+    vim.api.nvim_exec_autocmds("FocusGained", {})
+    check(reads == 2, "focus coming back with nothing new sends no receipt")
+    client.request = real
+  end
+
   -- Compose and send via :w.
   vim.api.nvim_buf_set_lines(S.bufs.compose, 0, -1, false, { "from nvim" })
   vim.api.nvim_set_current_win(S.wins.compose)

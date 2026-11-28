@@ -272,10 +272,18 @@ local function wire_events()
       and vim.api.nvim_get_current_tabpage() == S.tab
     if visible then
       chat.render()
+    end
+    -- The phone only reads a message while WhatsApp is on screen, so one
+    -- that lands while the terminal is in the background stays unread
+    -- until focus comes back.
+    if visible and S.focused then
       if S.opts.mark_read_on_view and not m.from_me then
         client.request("chat.read", { jid = m.chat_jid })
       end
-    elseif S.opts.notify and S.synced and not m.from_me then
+    elseif S.current == m.chat_jid and not m.from_me then
+      S.unseen = m.chat_jid
+    end
+    if not visible and S.opts.notify and S.synced and not m.from_me then
       -- Messages replayed at startup are already marked unread in the list.
       queue_notification(d.chat_name)
     end
@@ -445,6 +453,7 @@ function M.open_chat(jid)
     stop_typing()
   end
   S.current = jid
+  S.unseen = nil
   set_presence(true)
   M.ensure_compose()
   -- Drop the previous chat's view immediately, even if loading this one is slow.
@@ -828,6 +837,20 @@ local function catch_up(focus)
   if focus and S.current then
     set_presence(true)
   end
+  if S.unseen and S.unseen == S.current and S.focused then
+    S.unseen = nil
+    local c = S.chat_by_jid[S.current]
+    if S.opts.mark_read_on_view then
+      -- The list may not have caught up with the unread count yet, so
+      -- unseen decides, not c.unread.
+      if c then
+        c.unread = 0
+      end
+      client.request("chat.read", { jid = S.current }, function()
+        M.refresh_chats_soon()
+      end)
+    end
+  end
   if S.stale.chats then
     M.refresh_chats()
   end
@@ -869,7 +892,10 @@ local function build_layout()
     group = group,
     callback = function(ev)
       if ev.event == "FocusLost" then
+        S.focused = false
         set_presence(false)
+      elseif ev.event == "FocusGained" then
+        S.focused = true
       end
       -- In tmux, focus fires on every pane switch; the work below only
       -- matters when the WhatsApp tab is on screen, and TabEnter catches up.

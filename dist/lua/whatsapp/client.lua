@@ -125,6 +125,11 @@ function M.request(method, params, cb)
   proc:write(vim.json.encode({ id = next_id, method = method, params = params or vim.empty_dict() }) .. "\n")
 end
 
+-- Lets tests deliver a bridge event without a bridge that sends it.
+M.dispatch = function(line)
+  dispatch_line(line)
+end
+
 function M.on(event, fn)
   listeners[event] = listeners[event] or {}
   table.insert(listeners[event], fn)

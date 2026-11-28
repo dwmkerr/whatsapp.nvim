@@ -24,6 +24,8 @@ local M = {
   pairing = false,   -- pair.start sent, QR code not here yet
   typing = nil,      -- { jid, sender, who, media } while the other party types in the open chat
   available = false, -- bridge asked to show this device online
+  focused = true,    -- terminal has focus; stays true in terminals that never report it
+  unseen = nil,      -- open chat that got messages while off screen, read when it is back
   out_of_sync = {},  -- app state collections waiting on the phone's copy, name -> true
   stale = {},        -- panes ("chat", "list") and data ("chats") skipped while the tab was hidden
 }

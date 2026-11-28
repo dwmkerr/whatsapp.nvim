@@ -11,7 +11,7 @@ require("whatsapp").setup({
   compose_height = 3,
   page_size = 100,                               -- messages per page, K loads more
   notify = true,                                 -- vim.notify for chats you are not viewing
-  mark_read_on_view = true,                      -- send read receipts when you open a chat
+  mark_read_on_view = true,                      -- read receipts for the open chat while the terminal has focus
   default_reaction = "👍",
   layout = "bubbles",                            -- or "lines", L toggles
   images = {
@@ -37,6 +37,10 @@ Pictures work over SSH. Run Neovim and the plugin on the remote machine; the pic
 kitty sends `TERM=xterm-kitty` over SSH, so `auto` finds it. Ghostty and WezTerm identify themselves through variables SSH does not forward; set `images = { mode = "kitty" }` on the remote machine.
 
 tmux must run on the same machine as Neovim. With tmux on your local machine and SSH inside it, the plugin cannot tell tmux is there and pictures stay blank; set `images = { mode = "tag" }` for that setup.
+
+## Read receipts
+
+With `mark_read_on_view`, opening a chat reads it, and so does a message that arrives in the open chat while the terminal has focus. A message that arrives while you are in another terminal, tmux window or tab stays unread until you come back, as it would on the phone with WhatsApp in the background. This relies on the terminal reporting focus; inside tmux that needs `set -g focus-events on`. Without focus reports, the plugin treats the terminal as always focused.
 
 ## Highlight groups
 
